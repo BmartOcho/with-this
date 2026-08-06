@@ -2,10 +2,17 @@
 
 A small, zero-dependency Python CLI that matches the parts you own against a
 database of projects and answers the workbench question: **what can I build
-right now, and what am I one or two parts away from?**
+right now, and what am I one or two parts away from?** A chat mode layers
+your locally installed Claude Code on top for improvised project ideas —
+no API key involved.
 
-It reads two JSON files — your parts inventory and a project database — and
-sorts every project into three groups:
+One inventory JSON is the shared source of truth for both modes:
+
+- `partsmatcher match` — fast deterministic report, fully offline
+- `partsmatcher chat` — hands the same inventory to your local `claude`
+
+The matcher reads two JSON files — your parts inventory and a project
+database — and sorts every project into three groups:
 
 1. **BUILD NOW** — every required part is covered by your inventory.
 2. **ALMOST THERE** — you're short at most 2 parts total (configurable), with
@@ -57,6 +64,47 @@ Optionally install it as a `partsmatcher` command:
 $ pip install -e .
 $ partsmatcher --help
 ```
+
+## Chat mode — project ideas grounded in exactly what you own
+
+```console
+$ python -m partsmatcher chat
+```
+
+`partsmatcher chat` does **not** call the Anthropic API and needs no API key.
+It launches the Claude Code CLI (`claude`) you already have installed and
+logged in as an interactive child process, so your existing subscription auth
+applies and this tool bills nothing per token.
+
+What happens at startup:
+
+1. The tool verifies `claude` exists on PATH, and exits with an install hint
+   if it doesn't (`npm install -g @anthropic-ai/claude-code`).
+2. A session workspace is prepared (a fresh temp directory by default) with a
+   generated `CLAUDE.md` containing the inventory, the deterministic match
+   report, and workbench-assistant guidance — plus copies of `inventory.json`
+   and `projects.json`.
+3. `claude` is spawned in that workspace with your real terminal attached.
+   Claude Code reads `CLAUDE.md` at session start, so the chat opens already
+   knowing every part you own, quantities included.
+
+Then just talk: ask for project ideas beyond the database, pin-by-pin wiring
+explanations, or a substitute when you discover a part is missing — Claude
+adapts using only the parts on hand and flags anything you'd have to buy.
+
+```console
+$ python -m partsmatcher chat my_inventory.json my_projects.json
+$ python -m partsmatcher chat --no-projects            # inventory only
+$ python -m partsmatcher chat --prompt "What could I build in an hour?"
+$ python -m partsmatcher chat --workdir ~/bench/chat   # persistent workspace
+$ python -m partsmatcher chat -- --continue            # extra args go to claude
+```
+
+Safety note: a `CLAUDE.md` that PartsMatcher didn't generate is never
+overwritten — pick a different `--workdir` instead.
+
+The deterministic matcher never requires Claude to be installed; `match`
+stays fully offline.
 
 ## Input formats
 
@@ -129,17 +177,32 @@ projects you could build simultaneously.
 ## CLI reference
 
 ```text
-python -m partsmatcher [INVENTORY_JSON] [PROJECTS_JSON] [options]
+python -m partsmatcher match [INVENTORY_JSON] [PROJECTS_JSON] [options]
 
   --almost N     max total missing parts for the ALMOST THERE group (default: 2)
   --json         emit the report as JSON on stdout (notes go to stderr)
   -v, --verbose  also list exactly what each NOT YET project is missing
   --no-color     disable ANSI colors (NO_COLOR env var works too)
-  --version      show version
+
+python -m partsmatcher chat [INVENTORY_JSON] [PROJECTS_JSON] [options] [-- CLAUDE_ARGS...]
+
+  --almost N       threshold used for the match report handed to Claude
+  --no-projects    give Claude only the inventory, no project database
+  --workdir DIR    session workspace (default: fresh temp dir)
+  --prompt TEXT    opening prompt for the Claude session
+  --claude-bin P   Claude Code binary to launch (default: claude)
+  --               everything after this is passed to claude verbatim
+
+  --version        show version
 ```
 
+Running without a subcommand behaves as `match`, so
+`python -m partsmatcher inv.json proj.json --json` keeps working.
+
 Exit codes: `0` on success, `2` on bad input (unreadable file, invalid JSON,
-schema errors — reported with the file, project, and part that caused them).
+schema errors — reported with the file, project, and part that caused them)
+or when `claude` isn't installed; chat otherwise returns claude's own exit
+code.
 
 ### JSON output
 
@@ -193,15 +256,21 @@ JSON — no matcher changes needed:
 
 The core logic is importable independently of the CLI
 (`from partsmatcher import parse_inventory, parse_projects, match`), so a
-vision pipeline can also call it directly.
+vision pipeline can also call it directly. Chat mode already treats the
+inventory file as the shared source of truth — a future vision module that
+rewrites `inventory.json` feeds both the matcher and the Claude session with
+no further changes.
 
 ## Development
 
 ```console
-$ python -m unittest        # run the test suite
+$ python -m unittest        # run the test suite (no Claude required)
 $ python -m partsmatcher    # smoke-test against the bundled samples
 ```
 
 Layout: `partsmatcher/matcher.py` holds the pure matching logic (no I/O),
-`partsmatcher/cli.py` the argument parsing and rendering, and
-`partsmatcher/samples/` the bundled demo data pinned by the tests.
+`partsmatcher/cli.py` the argument parsing and rendering,
+`partsmatcher/chat.py` the Claude Code session preparation and launch, and
+`partsmatcher/samples/` the bundled demo data pinned by the tests. The chat
+tests inject fake `which`/`launch` callables, so the suite runs without
+Claude installed.
