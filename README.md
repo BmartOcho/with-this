@@ -139,9 +139,10 @@ your inventory vocabulary.
 
 **Sync-back.** When the session ends, PartsMatcher validates the edited
 `inventory.json` and writes it back to your inventory file (previous version
-saved alongside as `<name>.bak`), and appends the session's new alias records
-to `<stem>.aliases.jsonl` next to it. Invalid edits never overwrite your
-file — you get a warning and the workspace path instead. When you're on the
+saved alongside as `<name>.bak`), does the same for `projects.json` when
+your own project database is loaded, and appends the session's new alias
+records to `<stem>.aliases.jsonl` next to it. Invalid edits never overwrite
+your file — you get a warning and the workspace path instead. When you're on the
 bundled sample data nothing is overwritten either; the summary tells you
 where the updated files live. `--no-sync` disables write-back entirely.
 
@@ -189,6 +190,34 @@ visual description as the raw phrasing:
 You can also hand Claude an image path mid-session (or drop a file into the
 workspace `photos/` folder) — same flow. Supported types: `.png`, `.jpg`,
 `.jpeg`, `.gif`, `.webp`.
+
+### A personal project database
+
+The bundled sample projects are generic — written around parts you may not
+own (a "USB cable" that really means a Nano's Mini-B). The honest fix is
+your own database, and chat mode can author it:
+
+```console
+$ python -m partsmatcher chat my_inventory.json my_projects.json
+```
+
+If `my_projects.json` doesn't exist yet, the session starts from an empty
+database and the file is created on first sync. Describe what you want to
+build ("add a project: plant waterer on the Uno with the pump and a soil
+sensor") and Claude drafts the complete parts list — quantities and hookup
+consumables included — using your inventory's exact part names for parts
+you own, which is what makes the resulting BUILD NOW rows honest: the
+matcher matches names exactly, so a personal project written around your
+real "USB Type-B cable" matches it, where the sample's generic "USB cable"
+never will. Ambiguities go through the usual clarifying questions, the
+drafted project is confirmed before writing, and adapting a sample project
+to your parts is a normal move ("Blink Badge (UNO)" with substitutions
+noted in the description).
+
+Project edits sync back like inventory edits — validated first, previous
+version saved as `<name>.bak`, created fresh on first sync, covered by
+`recover`. Edits made while the bundled sample is loaded stay in the
+workspace instead; the sample is never modified.
 
 ```console
 $ python -m partsmatcher chat my_inventory.json my_projects.json

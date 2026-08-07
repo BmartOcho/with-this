@@ -5,33 +5,29 @@ a deterministic matcher plus conversational/photo intake through your local
 Claude Code, quietly accumulating the naming-alias dataset a standalone
 vision scanner will eventually consume.
 
-## Now (v0.5.x)
+## Now (v0.6.x)
 
-- **Real-world photo test: run and passed (2026-08-07).** Vision v1
-  identified an LM2596 buck module (confidence 0.95) and an 18650 cell
-  (0.85) from one bench photo; reconcile applied seven renames; all nine
-  alias records landed exactly per protocol (`corrected` with the old
-  inventory name as raw, `photo` with visual description + filename +
-  confidence). The match report went from one ALMOST THERE to seven —
-  six of them short exactly "USB cable".
-- **v0.5.0 ships the test's findings:** `partsmatcher recover` — the
-  closed-terminal incident stranded the whole session in its temp
-  workspace, so every workspace now carries a `.partsmatcher-session.json`
-  record and the end-of-session sync can be re-run afterward,
-  idempotently — plus a runnable matcher command embedded in the generated
-  CLAUDE.md (the session couldn't invoke the matcher from the bare temp
-  workspace and had to hand-simulate the post-rename report).
-- **Open on the bench:** the "USB cable" call — six Nano projects need a
-  Mini-B cable; renaming Ben's USB Type-B cables would make the report
-  lie. Resolved by a board-accurate `my_projects.json`, not by a rename.
+- **v0.6.0: chat mode authors project databases.**
+  `partsmatcher chat my_inventory.json my_projects.json` — a path that
+  doesn't exist yet starts an empty database, created on first sync. The
+  session protocol drafts projects in the INVENTORY's exact vocabulary
+  (the honest resolution of the coarse-vocabulary tension from the photo
+  test: a project written around "USB Type-B cable" instead of a generic
+  "USB cable"), confirms before writing, syncs edits back with a `.bak`
+  backup, and `recover` covers the project database too.
+- **Real-world test next (Ben's Mac):** the authoring session — build
+  `my_projects.json` conversationally, adapting the sample projects worth
+  keeping to the parts on hand (UNO + Type-B where that's the real
+  build), then `python -m partsmatcher match my_inventory.json
+  my_projects.json` for the first honest BUILD NOW rows. Fix what the
+  session surfaces, same as the photo test.
+- **Still open on the bench:** a Mini-B cable would flip six sample
+  projects instantly; the personal database makes that moot for projects
+  authored around the UNO.
 
 ## Next
 
-- Replace the sample project database with a personal `my_projects.json` —
-  board-accurate cable/buzzer naming dissolves the coarse-vocabulary
-  tension the test surfaced ("USB cable", "Piezo buzzer").
-- Add CI: a GitHub Actions workflow running `python -m unittest` so PRs get
-  a real green check (repo currently has no checks).
+- (Fed by the authoring test — protocol fixes land here first.)
 
 ## Later
 
@@ -47,11 +43,12 @@ vision scanner will eventually consume.
 
 ## State notes (2026-08-07)
 
-- `main` = v0.5.0 (matcher → chat mode → conversational intake → photo
+- `main` = v0.6.0 (matcher → chat mode → conversational intake → photo
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
-  command).
-- 90 stdlib `unittest` tests; the chat tests inject fakes, so the suite
-  never needs Claude installed.
+  command → CI → project-database intake).
+- 104 stdlib `unittest` tests; the chat tests inject fakes, so the suite
+  never needs Claude installed. CI: GitHub Actions runs the suite plus a
+  sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
 - User-side data lives on Ben's machine, not in this repo:
   `my_inventory.json` (58 part types / 544 parts, two entries with photo
   provenance), its `.bak`, and `my_inventory.aliases.jsonl` (64 records).

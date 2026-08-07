@@ -344,9 +344,11 @@ def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
     from . import chat  # imported lazily: `match` never touches chat machinery
 
     inventory_is_sample = args.inventory is None
+    projects_is_sample = args.projects is None
     inventory_path = _resolve_input_path(args.inventory, SAMPLE_INVENTORY, "inventory")
     report = None
     projects_text = None
+    projects_store = None
     try:
         photos = []
         for raw in args.photo or []:
@@ -367,8 +369,24 @@ def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
             projects_path = _resolve_input_path(
                 args.projects, SAMPLE_PROJECTS, "projects"
             )
-            projects = parse_projects(_load_json(projects_path, "project database"))
-            projects_text = projects_path.read_text(encoding="utf-8")
+            if not projects_is_sample:
+                projects_store = projects_path
+            if projects_store is not None and not projects_path.exists():
+                # A personal project database that doesn't exist yet starts
+                # empty; the exit sync creates the file once it has projects.
+                projects_text = '{\n  "projects": []\n}\n'
+                projects = parse_projects(json.loads(projects_text))
+                print(
+                    f"note: {projects_path} does not exist yet — starting an "
+                    "empty project database; it will be created when the "
+                    "session adds projects",
+                    file=sys.stderr,
+                )
+            else:
+                projects = parse_projects(
+                    _load_json(projects_path, "project database")
+                )
+                projects_text = projects_path.read_text(encoding="utf-8")
             report = match(inventory, projects, almost_threshold=args.almost)
 
         # The bundled sample never gets written back to — intake results stay
@@ -390,6 +408,7 @@ def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
             report=report,
             projects_text=projects_text,
             inventory_store=inventory_store,
+            projects_store=projects_store,
             alias_store=alias_store,
             alias_seed_text=alias_seed_text,
             sync=not args.no_sync,

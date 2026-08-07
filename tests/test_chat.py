@@ -97,6 +97,29 @@ class ContextMarkdownTests(unittest.TestCase):
         text = chat.build_context_markdown(sample_inventory(), None)
         self.assertIn("The user can re-run `python -m partsmatcher match`", text)
 
+    def test_projects_intake_section_with_personal_store(self):
+        text = chat.build_context_markdown(
+            sample_inventory(),
+            None,
+            projects_loaded=True,
+            projects_store_name="my_projects.json",
+        )
+        self.assertIn("## Project database intake", text)
+        self.assertIn("spell part names EXACTLY as the", text)
+        self.assertIn("`my_projects.json`", text)
+        self.assertNotIn("bundled sample: edits stay", text)
+
+    def test_projects_intake_section_for_sample_is_workspace_only(self):
+        text = chat.build_context_markdown(
+            sample_inventory(), None, projects_loaded=True
+        )
+        self.assertIn("## Project database intake", text)
+        self.assertIn("never written back to the sample", text)
+
+    def test_no_projects_omits_projects_intake_section(self):
+        text = chat.build_context_markdown(sample_inventory(), None)
+        self.assertNotIn("## Project database intake", text)
+
 
 class WorkspaceTests(unittest.TestCase):
     def test_creates_temp_workspace_with_context_and_data(self):
@@ -310,6 +333,24 @@ class RunChatTests(unittest.TestCase):
             )
         self.assertIsNone(record["inventory_store"])
         self.assertIsNone(record["alias_store"])
+        self.assertIsNone(record["projects_store"])
+
+    def test_context_and_session_record_carry_projects_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp, "my_projects.json")
+            _, calls, _, _ = self.run_chat(
+                workdir=str(Path(tmp, "ws")), projects_store=store
+            )
+            context = Path(calls["cwd"], "CLAUDE.md").read_text(encoding="utf-8")
+            record = json.loads(
+                Path(calls["cwd"], chat.SESSION_FILENAME).read_text(
+                    encoding="utf-8"
+                )
+            )
+        self.assertIn("## Project database intake", context)
+        self.assertIn("`my_projects.json`", context)
+        self.assertEqual(record["projects_store"], str(store))
+        self.assertEqual(record["original_projects"], "[]")
 
 
 def editing_launch(new_inventory=None, alias_lines=(), returns=0):
@@ -434,6 +475,99 @@ class SyncBackTests(unittest.TestCase):
         self.assertIn("--no-sync", out)
 
 
+class ProjectsSyncTests(unittest.TestCase):
+    EMPTY = '{\n  "projects": []\n}\n'
+    UPDATED = json.dumps(
+        {
+            "projects": [
+                {
+                    "name": "Blink Badge (UNO)",
+                    "description": "Blink Badge adapted to the Uno on hand.",
+                    "parts": [
+                        {"name": "Arduino Uno", "quantity": 1},
+                        {"name": "Red LED", "quantity": 1},
+                        {"name": "USB Type-B cable", "quantity": 1},
+                    ],
+                }
+            ]
+        },
+        indent=2,
+    )
+
+    def projects_launch(self, new_projects):
+        def _launch(command, cwd=None):
+            Path(cwd, "projects.json").write_text(new_projects, encoding="utf-8")
+            return 0
+
+        return _launch
+
+    def run_sync(self, launch, *, store="missing", original=None):
+        """store: 'missing' (bootstrap), 'exists', or None (bundled sample)."""
+        stack = tempfile.TemporaryDirectory()
+        tmp = stack.name
+        self.addCleanup(stack.cleanup)
+        original = self.EMPTY if original is None else original
+        projects_store = None
+        if store is not None:
+            projects_store = Path(tmp, "my_projects.json")
+            if store == "exists":
+                projects_store.write_text(original, encoding="utf-8")
+        stdout = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+            chat.run_chat(
+                inventory=parse_inventory([]),
+                inventory_text="[]",
+                projects_text=original,
+                projects_store=projects_store,
+                workdir=str(Path(tmp, "workspace")),
+                which=lambda binary: f"/usr/local/bin/{binary}",
+                launch=launch,
+            )
+        return projects_store, Path(tmp, "workspace"), stdout.getvalue()
+
+    def test_first_sync_creates_the_store_file(self):
+        store, _, out = self.run_sync(self.projects_launch(self.UPDATED))
+        self.assertEqual(store.read_text(encoding="utf-8"), self.UPDATED)
+        self.assertFalse(store.with_name("my_projects.json.bak").exists())
+        self.assertIn("project database updated", out)
+        self.assertIn("0 → 1 projects; new file", out)
+
+    def test_edit_of_existing_store_backs_up_first(self):
+        store, _, out = self.run_sync(
+            self.projects_launch(self.UPDATED), store="exists"
+        )
+        self.assertEqual(store.read_text(encoding="utf-8"), self.UPDATED)
+        self.assertEqual(
+            store.with_name("my_projects.json.bak").read_text(encoding="utf-8"),
+            self.EMPTY,
+        )
+        self.assertIn("previous version saved to my_projects.json.bak", out)
+
+    def test_invalid_edit_never_touches_store(self):
+        store, workdir, out = self.run_sync(
+            self.projects_launch('{"projects": [{"name": "No Parts"}]}'),
+            store="exists",
+        )
+        self.assertEqual(store.read_text(encoding="utf-8"), self.EMPTY)
+        self.assertIn("no longer validates", out)
+        self.assertIn(str(workdir), out)
+
+    def test_unchanged_projects_stay_silent(self):
+        store, _, out = self.run_sync(
+            self.projects_launch(self.EMPTY), store="exists"
+        )
+        self.assertEqual(store.read_text(encoding="utf-8"), self.EMPTY)
+        self.assertNotIn("project database", out)
+
+    def test_sample_projects_edits_stay_in_workspace(self):
+        store, workdir, out = self.run_sync(
+            self.projects_launch(self.UPDATED), store=None
+        )
+        self.assertIsNone(store)
+        self.assertIn("bundled sample", out)
+        self.assertIn(str(workdir), out)
+
+
 class RecoverTests(unittest.TestCase):
     ORIGINAL = SyncBackTests.ORIGINAL
     UPDATED = SyncBackTests.UPDATED
@@ -547,6 +681,38 @@ class RecoverTests(unittest.TestCase):
             self.assertFalse(source.with_name("inv.json.bak").exists())
         self.assertIn("nothing to recover", out)
 
+    def test_recover_syncs_projects_and_is_idempotent_about_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp, "my_projects.json")
+            workdir = Path(tmp, "partsmatcher-chat-proj")
+            updated = ProjectsSyncTests.UPDATED
+
+            def launch(command, cwd=None):
+                Path(cwd, "projects.json").write_text(updated, encoding="utf-8")
+                return 0
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                chat.run_chat(
+                    inventory=parse_inventory([]),
+                    inventory_text="[]",
+                    projects_text=ProjectsSyncTests.EMPTY,
+                    projects_store=store,
+                    sync=False,
+                    workdir=str(workdir),
+                    which=lambda binary: f"/usr/local/bin/{binary}",
+                    launch=launch,
+                )
+            self.assertFalse(store.exists())
+            code, out = self.recover(str(workdir))
+            self.assertEqual(code, 0)
+            self.assertEqual(store.read_text(encoding="utf-8"), updated)
+            code2, out2 = self.recover(str(workdir))
+            self.assertEqual(code2, 0)
+            self.assertEqual(store.read_text(encoding="utf-8"), updated)
+            self.assertFalse(store.with_name("my_projects.json.bak").exists())
+        self.assertIn("project database updated", out)
+        self.assertIn("project database already in sync", out2)
+
     def test_sample_session_recovery_touches_no_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             workdir = Path(tmp, "ws")
@@ -596,6 +762,54 @@ class CliRoutingTests(unittest.TestCase):
         kwargs = run_chat.call_args.kwargs
         self.assertIsNone(kwargs["report"])
         self.assertIsNone(kwargs["projects_text"])
+        self.assertIsNone(kwargs["projects_store"])
+
+    def test_user_projects_path_becomes_persistent_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            inventory = Path(tmp, "inv.json")
+            inventory.write_text(json.dumps([{"name": "Nut", "quantity": 4}]))
+            projects = Path(tmp, "my_projects.json")
+            projects_text = json.dumps(
+                {"projects": [{"name": "P", "parts": [{"name": "Nut"}]}]}
+            )
+            projects.write_text(projects_text)
+            with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
+                code, _, _ = self.invoke(["chat", str(inventory), str(projects)])
+        self.assertEqual(code, 0)
+        kwargs = run_chat.call_args.kwargs
+        self.assertEqual(kwargs["projects_store"], projects)
+        self.assertEqual(kwargs["projects_text"], projects_text)
+        self.assertIsNotNone(kwargs["report"])
+
+    def test_sample_projects_get_no_persistent_store(self):
+        with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
+            self.invoke(["chat"])
+        self.assertIsNone(run_chat.call_args.kwargs["projects_store"])
+
+    def test_missing_projects_path_bootstraps_empty_database(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            inventory = Path(tmp, "inv.json")
+            inventory.write_text(json.dumps([{"name": "Nut", "quantity": 4}]))
+            missing = Path(tmp, "my_projects.json")
+            with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
+                code, _, err = self.invoke(["chat", str(inventory), str(missing)])
+        self.assertEqual(code, 0)
+        self.assertIn("does not exist yet", err)
+        kwargs = run_chat.call_args.kwargs
+        self.assertEqual(kwargs["projects_store"], missing)
+        self.assertEqual(json.loads(kwargs["projects_text"]), {"projects": []})
+        self.assertIsNotNone(kwargs["report"])
+        self.assertFalse(missing.exists())
+
+    def test_missing_projects_path_still_errors_for_match(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            inventory = Path(tmp, "inv.json")
+            inventory.write_text(json.dumps([{"name": "Nut", "quantity": 4}]))
+            code, _, err = self.invoke(
+                ["match", str(inventory), str(Path(tmp, "nope.json"))]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("could not read project database", err)
 
     def test_bare_invocation_still_runs_match(self):
         code, out, _ = self.invoke([])
