@@ -34,7 +34,7 @@ SAMPLE_DIR = Path(__file__).resolve().parent / "samples"
 SAMPLE_INVENTORY = SAMPLE_DIR / "inventory.json"
 SAMPLE_PROJECTS = SAMPLE_DIR / "projects.json"
 
-KNOWN_COMMANDS = ("match", "chat")
+KNOWN_COMMANDS = ("match", "chat", "recover")
 _TOP_LEVEL_FLAGS = ("-h", "--help", "--version")
 
 
@@ -161,6 +161,27 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "after the session, leave inventory edits and new alias records "
             "in the workspace instead of syncing them back to your files"
+        ),
+    )
+
+    recover_parser = subparsers.add_parser(
+        "recover",
+        help="sync back a chat session that ended without a clean exit",
+        description=(
+            "Re-run the end-of-session sync for a chat workspace whose "
+            "session died before it could flow inventory edits and new "
+            "alias records back to your files (closed terminal, crash). "
+            "Same validation and .bak backup as the normal exit; safe to "
+            "re-run — files already in sync are left alone."
+        ),
+    )
+    recover_parser.add_argument(
+        "workspace",
+        nargs="?",
+        metavar="WORKSPACE_DIR",
+        help=(
+            "chat workspace directory to sync back (default: the newest "
+            "recoverable workspace in the system temp directory)"
         ),
     )
     return parser
@@ -384,6 +405,16 @@ def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
     return result
 
 
+def _run_recover(args: argparse.Namespace) -> int:
+    from . import chat  # imported lazily: `match` never touches chat machinery
+
+    try:
+        return chat.recover_session(args.workspace)
+    except PartsMatcherError as exc:
+        print(f"partsmatcher: error: {exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv: "list[str] | None" = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
@@ -399,13 +430,15 @@ def main(argv: "list[str] | None" = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.almost < 0:
+    if getattr(args, "almost", 0) < 0:
         parser.error("--almost must be >= 0")
 
     if args.command == "chat":
         return _run_chat(args, claude_args)
     if claude_args:
         parser.error("arguments after '--' are only used by `partsmatcher chat`")
+    if args.command == "recover":
+        return _run_recover(args)
     return _run_match(args)
 
 
