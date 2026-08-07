@@ -7,48 +7,51 @@ vision scanner will eventually consume.
 
 ## Now (v0.6.x)
 
-- **v0.6.0: chat mode authors project databases.**
-  `partsmatcher chat my_inventory.json my_projects.json` — a path that
-  doesn't exist yet starts an empty database, created on first sync. The
-  session protocol drafts projects in the INVENTORY's exact vocabulary
-  (the honest resolution of the coarse-vocabulary tension from the photo
-  test: a project written around "USB Type-B cable" instead of a generic
-  "USB cable"), confirms before writing, syncs edits back with a `.bak`
-  backup, and `recover` covers the project database too.
-- **Real-world test next (Ben's Mac):** the authoring session — build
-  `my_projects.json` conversationally, adapting the sample projects worth
-  keeping to the parts on hand (UNO + Type-B where that's the real
-  build), then `python -m partsmatcher match my_inventory.json
-  my_projects.json` for the first honest BUILD NOW rows. Fix what the
-  session surfaces, same as the photo test.
-- **Still open on the bench:** a Mini-B cable would flip six sample
-  projects instantly; the personal database makes that moot for projects
-  authored around the UNO.
+- **Authoring test: run and passed (2026-08-07).** One session built
+  `my_projects.json` from nothing: 8 sample projects adapted with honest
+  substitutions (UNO + Type-B throughout; DHT11-for-BME280 with serial
+  logging replacing the missing microSD), 2 honestly skipped with
+  reasons, 3 new projects drafted from the inventory. Exit sync created
+  the file (`0 → 11 projects; new file`), logged 3 substitution alias
+  records, and the on-disk run produced the first honest
+  `BUILD NOW (11)`. The mid-session matcher command was exercised live,
+  and the session hand-computed what the matcher deliberately doesn't:
+  concurrent-build capacity (ceiling of 2 — boards, cables, and
+  breadboards run out before components).
+- **v0.6.1 polishes what the test surfaced:** a default kickoff greeting
+  (a plain session used to open as a blank terminal — now it introduces
+  what it knows unless the user passes `--prompt`), a pointer to the
+  bundled sample database in personal-DB session context (the user had
+  to hand-paste the path to adapt samples), and narrow-terminal output
+  guidance (wide tables wrapped into fragments mid-session).
 
 ## Next
 
-- (Fed by the authoring test — protocol fixes land here first.)
+- **Standalone batch scanner** — photos in, inventory JSON out, no
+  conversation. The inventory schema is already its contract (one entry
+  per detection, `quantity: 1`, `source`/`confidence` fields, duplicates
+  merge by summing) and `*.aliases.jsonl` supplies the naming vocabulary
+  (67 records and growing).
 
 ## Later
 
-- **Standalone batch scanner** — photos in, inventory JSON out, no
-  conversation. The inventory schema is already its contract (one entry per
-  detection, `quantity: 1`, `source`/`confidence` fields, duplicates merge
-  by summing) and `*.aliases.jsonl` supplies the naming vocabulary.
 - Ideas parked: richer kit/assortment modeling, substitution modeling
-  (a UNO standing in for a Nano, passive buzzer for piezo), shopping-list
-  export for a chosen project, alias-frequency-informed normalization,
+  (a UNO standing in for a Nano, passive buzzer for piezo),
+  concurrent-build planning (which combination of projects can run at
+  once — sessions currently hand-compute it), shopping-list export for a
+  chosen project, alias-frequency-informed normalization,
   specificity-preserving renames (reconcile currently trades detail for
   match-ability: "Breadboard (830 tie-points)" → "Breadboard").
 
 ## State notes (2026-08-07)
 
-- `main` = v0.6.0 (matcher → chat mode → conversational intake → photo
+- `main` = v0.6.1 (matcher → chat mode → conversational intake → photo
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
-  command → CI → project-database intake).
-- 104 stdlib `unittest` tests; the chat tests inject fakes, so the suite
+  command → CI → project-database intake → kickoff greeting polish).
+- 108 stdlib `unittest` tests; the chat tests inject fakes, so the suite
   never needs Claude installed. CI: GitHub Actions runs the suite plus a
   sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
 - User-side data lives on Ben's machine, not in this repo:
   `my_inventory.json` (58 part types / 544 parts, two entries with photo
-  provenance), its `.bak`, and `my_inventory.aliases.jsonl` (64 records).
+  provenance), `my_projects.json` (11 projects, all BUILD NOW), their
+  `.bak` files, and `my_inventory.aliases.jsonl` (67 records).

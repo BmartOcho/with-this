@@ -49,6 +49,19 @@ DEFAULT_PHOTO_PROMPT = (
     "and walk me through confirming them into the inventory."
 )
 
+# With no user prompt and no photos, the session would open as a blank
+# terminal — greet instead, so the user knows what they're looking at.
+DEFAULT_KICKOFF_PROMPT = (
+    "Briefly introduce this PartsMatcher session from the context you've "
+    "read: the inventory size, the match report's headline (or that no "
+    "project database is loaded), and the ways you can help — project "
+    "ideas and wiring, plain-language inventory intake, photo intake, "
+    "project-database intake, reconciliation. Keep it short and end by "
+    "asking what the user wants to do."
+)
+
+SAMPLE_PROJECTS_PATH = Path(__file__).resolve().parent / "samples" / "projects.json"
+
 CLAUDE_NOT_FOUND_HINT = """\
 partsmatcher: error: could not find {binary!r} on PATH.
 
@@ -163,6 +176,8 @@ def build_context_markdown(
         "  show otherwise.",
         "- Mention safety only where it genuinely matters (mains voltage, LiPo",
         "  charging, stalled motors).",
+        "- Prefer compact lists over wide tables: this renders in a terminal,",
+        "  where wide tables wrap into unreadable fragments.",
     ]
     if match_command:
         lines += [
@@ -309,6 +324,11 @@ def build_context_markdown(
                 "Changes to `projects.json` sync back to the user's",
                 f"`{projects_store_name}` when the session ends (with a",
                 "backup), so keep it valid JSON at all times.",
+                "",
+                "Starter material: the bundled sample database at",
+                f"`{SAMPLE_PROJECTS_PATH}`",
+                "holds ten classic beginner projects — read it when the user",
+                "wants ideas to adapt to their parts.",
                 "",
             ]
         else:
@@ -813,6 +833,8 @@ def run_chat(
     )
     if staged_photos and not prompt:
         prompt = DEFAULT_PHOTO_PROMPT
+    elif not prompt:
+        prompt = DEFAULT_KICKOFF_PROMPT
 
     print(
         f"PartsMatcher chat — {inventory.distinct_parts} part types "
