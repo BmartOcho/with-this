@@ -7,20 +7,21 @@ vision scanner will eventually consume.
 
 ## Now (v0.4.x)
 
-- **PR #4 (open):** intake vocabulary alignment, kit expansion, and the
-  "reconcile" flow — born from the first real-world test, where intake run
-  with `--no-projects` produced names the project database never uses and
-  `BUILD NOW (0)` against 542 real parts. Merge → `git pull` → re-test.
-- **Real-world test in flight (Ben's Mac, `~/with-this`):** inventory built
-  via conversational intake — 56 part types / 542 parts in
-  `my_inventory.json`, 55 records in `my_inventory.aliases.jsonl`. Still to
-  do: the reconcile session (fix USB cable / breadboard / resistor-kit
-  naming) and the first real photo intake.
+- **Real-world photo test (in flight, Ben's Mac, `~/with-this`):** one
+  session doing reconcile + the first photo intake —
+  `python -m partsmatcher chat my_inventory.json --photo <bench-photo>`,
+  opening with "Reconcile my inventory with the project database, then
+  identify the photo." Collect what the photo pass identified vs. got
+  wrong, the corrections (highest-value alias records), the exit
+  sync-summary lines, and the new "photo"/"corrected" alias records; then
+  re-run `python -m partsmatcher match my_inventory.json` — BUILD NOW
+  should finally light up after reconciliation.
+- Fix whatever that test surfaces. Likely levers: the photo-intake and
+  intake protocol text in `chat.py` (`build_context_markdown`), confidence
+  guidance, kit handling.
 
 ## Next
 
-- Run reconcile + photo intake in one session; correct misidentifications
-  freely (corrections are the highest-value alias records).
 - Replace the sample project database with a personal `my_projects.json`.
 - Add CI: a GitHub Actions workflow running `python -m unittest` so PRs get
   a real green check (repo currently has no checks).
@@ -36,9 +37,11 @@ vision scanner will eventually consume.
 
 ## State notes (2026-08-07)
 
-- `main` = v0.4.0 (PRs #1–#3 merged: matcher → chat mode → conversational
-  intake → photo intake). PR #4 carries v0.4.1.
+- `main` = v0.4.1 (PRs #1–#4 merged: matcher → chat mode → conversational
+  intake → photo intake → vocabulary alignment / kit expansion /
+  reconcile guidance).
 - 72 stdlib `unittest` tests; the chat tests inject fakes, so the suite
   never needs Claude installed.
 - User-side data lives on Ben's machine, not in this repo:
-  `my_inventory.json`, its `.bak`, and `my_inventory.aliases.jsonl`.
+  `my_inventory.json` (56 part types / 542 parts), its `.bak`, and
+  `my_inventory.aliases.jsonl` (55 records).
