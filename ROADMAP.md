@@ -27,11 +27,25 @@ vision scanner will eventually consume.
 
 ## Next
 
-- **Standalone batch scanner** — photos in, inventory JSON out, no
-  conversation. The inventory schema is already its contract (one entry
-  per detection, `quantity: 1`, `source`/`confidence` fields, duplicates
-  merge by summing) and `*.aliases.jsonl` supplies the naming vocabulary
-  (67 records and growing).
+- **Full local app (decision — Ben, 2026-08-07):** the UI direction is a
+  full local application, not a read-only report export. Ben's framing:
+  the app is "how the chat with Claude feature can actually work" as a
+  product surface — chat embedded in the app instead of a bare terminal,
+  with the existing workspace mechanics underneath (generated CLAUDE.md
+  context, sync-back, alias logging, session records / `recover`).
+  Questions for the session that builds it, to settle with Ben BEFORE
+  code: (1) how the app drives the local Claude Code — terminal handoff
+  as today, or headless/programmatic (`claude -p`, Agent SDK) — and
+  (2) whether the zero-dependency rule stays engine-only (stdlib
+  `http.server` + static page) or relaxes at the UI boundary. Seams
+  already in place: the importable matcher, `chat.py`'s workspace prep
+  and session records, and schemas that have held stable across three
+  feature waves.
+- **Standalone batch scanner** — unchanged in scope (photos in,
+  inventory JSON out, no conversation; the inventory schema is its
+  contract and `*.aliases.jsonl` supplies the naming vocabulary, 67
+  records). Its detection-review screen becomes an app view once the
+  app exists.
 
 ## Later
 
