@@ -5,8 +5,18 @@ a deterministic matcher plus conversational/photo intake through your local
 Claude Code, quietly accumulating the naming-alias dataset a standalone
 vision scanner will eventually consume.
 
-## Now (v0.6.x)
+## Now (v0.7.x)
 
+- **Local app v1 (v0.7.0):** `partsmatcher app` — the chat session as a
+  browser page. Ben ratified both architecture recommendations
+  (docs/APP_ARCHITECTURE.md, merged 2026-08-07): headless per-turn
+  `claude -p --resume` with stream-json (1B), and a zero-dependency
+  stdlib `http.server` + embedded page + streamed turns (2A) — the
+  zero-dependency rule holds project-wide. Sync fires on the page's
+  End-session button and on clean Ctrl-C; headless permissions come from
+  a generated workspace allowlist (`.claude/settings.local.json`);
+  `recover` covers unclean exits unchanged. The `chat` and `app`
+  commands share one input-loading path in the CLI.
 - **Authoring test: run and passed (2026-08-07).** One session built
   `my_projects.json` from nothing: 8 sample projects adapted with honest
   substitutions (UNO + Type-B throughout; DHT11-for-BME280 with serial
@@ -27,20 +37,12 @@ vision scanner will eventually consume.
 
 ## Next
 
-- **Full local app (decision — Ben, 2026-08-07):** the UI direction is a
-  full local application, not a read-only report export. Ben's framing:
-  the app is "how the chat with Claude feature can actually work" as a
-  product surface — chat embedded in the app instead of a bare terminal,
-  with the existing workspace mechanics underneath (generated CLAUDE.md
-  context, sync-back, alias logging, session records / `recover`).
-  Questions for the session that builds it, to settle with Ben BEFORE
-  code: (1) how the app drives the local Claude Code — terminal handoff
-  as today, or headless/programmatic (`claude -p`, Agent SDK) — and
-  (2) whether the zero-dependency rule stays engine-only (stdlib
-  `http.server` + static page) or relaxes at the UI boundary. Seams
-  already in place: the importable matcher, `chat.py`'s workspace prep
-  and session records, and schemas that have held stable across three
-  feature waves.
+- **App v1 hardening from Ben's first real run:** live-fire the headless
+  turn loop against Ben's actual `claude` install (stream-json shapes,
+  the allowlist actually covering what sessions do, per-turn latency
+  feel). The doc's 1C option (one long-lived stream-json process) is the
+  planned upgrade path if per-turn spawn grates — the runner interface
+  was shaped so it can slot in behind the server unchanged.
 - **Standalone batch scanner** — unchanged in scope (photos in,
   inventory JSON out, no conversation; the inventory schema is its
   contract and `*.aliases.jsonl` supplies the naming vocabulary, 67
@@ -59,10 +61,11 @@ vision scanner will eventually consume.
 
 ## State notes (2026-08-07)
 
-- `main` = v0.6.1 (matcher → chat mode → conversational intake → photo
+- `main` = v0.7.0 (matcher → chat mode → conversational intake → photo
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
-  command → CI → project-database intake → kickoff greeting polish).
-- 108 stdlib `unittest` tests; the chat tests inject fakes, so the suite
+  command → CI → project-database intake → kickoff greeting polish →
+  local app).
+- 127 stdlib `unittest` tests; the chat and app tests inject fakes, so the suite
   never needs Claude installed. CI: GitHub Actions runs the suite plus a
   sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
 - User-side data lives on Ben's machine, not in this repo:

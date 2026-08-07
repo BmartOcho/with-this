@@ -2,7 +2,13 @@
 
 Decision doc for the full local app (ROADMAP "Next", Ben 2026-08-07). Two
 decisions to settle before any app code, each with options and a
-recommendation. Nothing here is built yet.
+recommendation.
+
+**Ratified (Ben, 2026-08-07): all recommendations accepted** — 1B
+(headless per-turn `claude -p --resume`), 2A (stdlib server + embedded
+page), the generated workspace permission allowlist, and sync on both the
+End-session button and clean shutdown (unclean exits stay `recover`'s
+job). Built as v0.7.0 in `partsmatcher/app/`.
 
 The constant across every option: the app reuses the existing workspace
 mechanics unchanged. `chat.py` already separates the three phases the app
