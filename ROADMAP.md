@@ -29,9 +29,9 @@ vision scanner will eventually consume.
 
 - Replace the sample project database with a personal `my_projects.json` —
   board-accurate cable/buzzer naming dissolves the coarse-vocabulary
-  tension the test surfaced ("USB cable", "Piezo buzzer").
-- Add CI: a GitHub Actions workflow running `python -m unittest` so PRs get
-  a real green check (repo currently has no checks).
+  tension the test surfaced ("USB cable", "Piezo buzzer"). Repo side:
+  teach chat mode to author and sync back a project database the same way
+  it does the inventory.
 
 ## Later
 
@@ -51,7 +51,8 @@ vision scanner will eventually consume.
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
   command).
 - 90 stdlib `unittest` tests; the chat tests inject fakes, so the suite
-  never needs Claude installed.
+  never needs Claude installed. CI: GitHub Actions runs the suite plus a
+  sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
 - User-side data lives on Ben's machine, not in this repo:
   `my_inventory.json` (58 part types / 544 parts, two entries with photo
   provenance), its `.bak`, and `my_inventory.aliases.jsonl` (64 records).
