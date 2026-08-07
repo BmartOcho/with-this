@@ -57,6 +57,15 @@ class ContextMarkdownTests(unittest.TestCase):
         self.assertIn("append-only", text)
         self.assertIn("vision module", text)
 
+    def test_intake_covers_project_vocabulary_kits_and_reconciliation(self):
+        text = chat.build_context_markdown(sample_inventory(), None)
+        self.assertIn("prefer ITS part names", text)
+        self.assertIn("matches names", text)
+        self.assertIn("expand the kit into the specific values", text)
+        self.assertIn("rename/merge", text)
+        self.assertIn('action "corrected"', text)
+        self.assertIn("reconcile", text)
+
     def test_photo_intake_instructions_always_present(self):
         text = chat.build_context_markdown(sample_inventory(), None)
         self.assertIn("## Photo intake — vision v1", text)

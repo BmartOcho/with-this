@@ -115,6 +115,16 @@ exists), ask clarifying questions for anything ambiguous — vague quantities,
 missing specs, unclear board identity — confirm the batch, then update
 `inventory.json`. "Used up four red LEDs" decrements the same way.
 
+**Vocabulary alignment.** The deterministic matcher matches part names
+exactly, so run intake *with* your project database loaded (skip
+`--no-projects`) once you have one: the session then prefers the project
+database's part names for the same physical part, offers to expand
+assortment kits into the specific values projects reference (a
+`resistor kit ×1` entry can't satisfy `220 ohm resistor ×7`), and — if you
+ask it to "reconcile" — walks the match report's missing parts one by one to
+find the ones you actually own under a different name, logging each rename
+as a `corrected` alias.
+
 **Naming-alias dataset.** Every normalized entry is also logged as one JSON
 line in `aliases.jsonl`, pairing your raw phrasing with the canonical name:
 
