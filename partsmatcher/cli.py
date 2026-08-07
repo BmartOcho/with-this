@@ -146,6 +146,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Claude Code binary to launch (default: %(default)s)",
     )
+    chat_parser.add_argument(
+        "--no-sync",
+        action="store_true",
+        help=(
+            "after the session, leave inventory edits and new alias records "
+            "in the workspace instead of syncing them back to your files"
+        ),
+    )
     return parser
 
 
@@ -305,6 +313,7 @@ def _run_match(args: argparse.Namespace) -> int:
 def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
     from . import chat  # imported lazily: `match` never touches chat machinery
 
+    inventory_is_sample = args.inventory is None
     inventory_path = _resolve_input_path(args.inventory, SAMPLE_INVENTORY, "inventory")
     report = None
     projects_text = None
@@ -318,11 +327,29 @@ def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
             projects = parse_projects(_load_json(projects_path, "project database"))
             projects_text = projects_path.read_text(encoding="utf-8")
             report = match(inventory, projects, almost_threshold=args.almost)
+
+        # The bundled sample never gets written back to — intake results stay
+        # in the workspace, and the post-session summary says where.
+        inventory_store = None
+        alias_store = None
+        alias_seed_text = ""
+        if not inventory_is_sample:
+            inventory_store = inventory_path
+            alias_store = inventory_path.with_name(
+                inventory_path.stem + ".aliases.jsonl"
+            )
+            if alias_store.exists():
+                alias_seed_text = alias_store.read_text(encoding="utf-8")
+
         result = chat.run_chat(
             inventory=inventory,
             inventory_text=inventory_text,
             report=report,
             projects_text=projects_text,
+            inventory_store=inventory_store,
+            alias_store=alias_store,
+            alias_seed_text=alias_seed_text,
+            sync=not args.no_sync,
             workdir=args.workdir,
             prompt=args.prompt,
             claude_bin=args.claude_bin,
