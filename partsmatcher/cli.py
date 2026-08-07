@@ -136,6 +136,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     chat_parser.add_argument(
+        "--photo",
+        action="append",
+        metavar="IMAGE",
+        help=(
+            "stage a photo of parts for identification (repeatable); the "
+            "session starts by identifying them into draft inventory entries"
+        ),
+    )
+    chat_parser.add_argument(
         "--prompt",
         metavar="TEXT",
         help="opening prompt to hand Claude once the session starts",
@@ -318,6 +327,19 @@ def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
     report = None
     projects_text = None
     try:
+        photos = []
+        for raw in args.photo or []:
+            photo = Path(raw).expanduser()
+            if not photo.is_file():
+                raise PartsMatcherError(f"photo not found: {raw}")
+            if photo.suffix.lower() not in chat.IMAGE_SUFFIXES:
+                supported = ", ".join(chat.IMAGE_SUFFIXES)
+                raise PartsMatcherError(
+                    f"unsupported photo type {photo.suffix!r} for {raw} "
+                    f"(supported: {supported})"
+                )
+            photos.append(photo)
+
         inventory = parse_inventory(_load_json(inventory_path, "inventory"))
         inventory_text = inventory_path.read_text(encoding="utf-8")
         if not args.no_projects:
@@ -350,6 +372,7 @@ def _run_chat(args: argparse.Namespace, claude_args: "list[str]") -> int:
             alias_store=alias_store,
             alias_seed_text=alias_seed_text,
             sync=not args.no_sync,
+            photos=photos,
             workdir=args.workdir,
             prompt=args.prompt,
             claude_bin=args.claude_bin,

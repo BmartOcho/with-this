@@ -134,6 +134,39 @@ file — you get a warning and the workspace path instead. When you're on the
 bundled sample data nothing is overwritten either; the summary tells you
 where the updated files live. `--no-sync` disables write-back entirely.
 
+### Photo intake — vision v1
+
+Photos are another intake source, flowing through the same confirmation
+loop:
+
+```console
+$ python -m partsmatcher chat my_inventory.json --photo bench.jpg --photo drawer.png
+```
+
+Staged photos are copied into the session workspace under `photos/`, and the
+session opens by identifying them (Claude Code reads images natively — no
+extra tooling). Each detected part comes back as a **draft** entry with the
+identification confidence and reasoning:
+
+```text
+photos/bench.jpg → 470 ohm resistor ×25 (confidence 0.7 — blue axial body, bands unreadable)
+```
+
+Uncertain identifications go through the usual clarifying questions ("about
+20 axial resistors, but I can't read the bands — what value?"), and nothing
+is written without your confirmation. Confirmed photo entries land in
+`inventory.json` with provenance the schema already tolerates —
+`"source": "photo"` and `"confidence"` — and their alias records use the
+visual description as the raw phrasing:
+
+```json
+{"raw": "blue axial resistor, 4-band", "name": "470 ohm resistor", "quantity": 25, "action": "photo", "photo": "bench.jpg", "confidence": 0.7}
+```
+
+You can also hand Claude an image path mid-session (or drop a file into the
+workspace `photos/` folder) — same flow. Supported types: `.png`, `.jpg`,
+`.jpeg`, `.gif`, `.webp`.
+
 ```console
 $ python -m partsmatcher chat my_inventory.json my_projects.json
 $ python -m partsmatcher chat --no-projects            # inventory only
@@ -230,6 +263,7 @@ python -m partsmatcher chat [INVENTORY_JSON] [PROJECTS_JSON] [options] [-- CLAUD
 
   --almost N       threshold used for the match report handed to Claude
   --no-projects    give Claude only the inventory, no project database
+  --photo IMAGE    stage a photo of parts for identification (repeatable)
   --workdir DIR    session workspace (default: fresh temp dir)
   --prompt TEXT    opening prompt for the Claude session
   --claude-bin P   Claude Code binary to launch (default: claude)
@@ -275,11 +309,14 @@ code.
 }
 ```
 
-## Feeding inventory from a vision module (future)
+## The vision path
 
-Photo-based part identification is out of scope for now, but the inventory
-schema is designed to be its contract. A future scanner just emits the same
-JSON — no matcher changes needed:
+Vision v1 ships as photo intake inside chat mode (above): identification
+runs through your Claude Code session, drafts flow through the confirmation
+loop, and confirmed entries carry `source`/`confidence` provenance. A future
+*standalone* scanner (batch photo → inventory, no conversation) stays easy
+because the inventory schema was designed as its contract — it just emits
+the same JSON, and no matcher changes are needed:
 
 - It may write **one entry per detection** with `quantity: 1`; duplicates are
   merged by summing, so aggregation comes for free.
