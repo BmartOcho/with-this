@@ -109,6 +109,23 @@ class ContextMarkdownTests(unittest.TestCase):
         self.assertIn("`my_projects.json`", text)
         self.assertNotIn("bundled sample: edits stay", text)
 
+    def test_personal_store_context_points_at_sample_starter_material(self):
+        text = chat.build_context_markdown(
+            sample_inventory(),
+            None,
+            projects_loaded=True,
+            projects_store_name="my_projects.json",
+        )
+        self.assertIn(str(chat.SAMPLE_PROJECTS_PATH), text)
+        sample_text = chat.build_context_markdown(
+            sample_inventory(), None, projects_loaded=True
+        )
+        self.assertNotIn(str(chat.SAMPLE_PROJECTS_PATH), sample_text)
+
+    def test_guidance_prefers_lists_over_wide_tables(self):
+        text = chat.build_context_markdown(sample_inventory(), None)
+        self.assertIn("compact lists over wide tables", text)
+
     def test_projects_intake_section_for_sample_is_workspace_only(self):
         text = chat.build_context_markdown(
             sample_inventory(), None, projects_loaded=True
@@ -191,7 +208,10 @@ class RunChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             code, calls, out, _ = self.run_chat(workdir=tmp)
             self.assertEqual(code, 0)
-            self.assertEqual(calls["command"], ["/usr/local/bin/claude"])
+            self.assertEqual(
+                calls["command"],
+                ["/usr/local/bin/claude", chat.DEFAULT_KICKOFF_PROMPT],
+            )
             self.assertEqual(Path(calls["cwd"]).resolve(), Path(tmp).resolve())
             context = Path(calls["cwd"], "CLAUDE.md").read_text(encoding="utf-8")
             self.assertIn("- Red LED ×6", context)
@@ -281,6 +301,17 @@ class RunChatTests(unittest.TestCase):
                     workdir=tmp, photos=[photo], prompt="Just say hi"
                 )
         self.assertEqual(calls["command"][-1], "Just say hi")
+
+    def test_plain_session_opens_with_kickoff_greeting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, calls, _, _ = self.run_chat(workdir=tmp)
+        self.assertEqual(calls["command"][-1], chat.DEFAULT_KICKOFF_PROMPT)
+
+    def test_user_prompt_beats_kickoff_greeting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, calls, _, _ = self.run_chat(workdir=tmp, prompt="Just say hi")
+        self.assertEqual(calls["command"][-1], "Just say hi")
+        self.assertNotIn(chat.DEFAULT_KICKOFF_PROMPT, calls["command"])
 
     def test_context_carries_runnable_match_command_with_projects(self):
         with tempfile.TemporaryDirectory() as tmp:

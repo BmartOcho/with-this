@@ -87,7 +87,9 @@ What happens at startup:
    plus copies of `inventory.json` and `projects.json`.
 3. `claude` is spawned in that workspace with your real terminal attached.
    Claude Code reads `CLAUDE.md` at session start, so the chat opens already
-   knowing every part you own, quantities included.
+   knowing every part you own, quantities included. Without a `--prompt` of
+   your own, the session opens by introducing what it knows and what it can
+   do (photo sessions open with photo identification instead).
 
 Then just talk: ask for project ideas beyond the database, pin-by-pin wiring
 explanations, or a substitute when you discover a part is missing — Claude
