@@ -92,6 +92,48 @@ Then just talk: ask for project ideas beyond the database, pin-by-pin wiring
 explanations, or a substitute when you discover a part is missing — Claude
 adapts using only the parts on hand and flags anything you'd have to buy.
 
+### Conversational inventory intake
+
+Describe parts in plain language and Claude folds them into your inventory:
+
+```text
+you> picked up a strip of neopixels and a bag of resistors, and add two more nanos
+claude> A couple of questions before I write anything:
+        - the resistors — what value, and roughly how many?
+        - the NeoPixel strip — how long / how many LEDs?
+        ...
+        raw phrasing            → normalized entry
+        "a strip of neopixels"  → WS2812B LED strip (1 m) ×1
+        "a bag of resistors"    → 470 ohm resistor ×25
+        "two more nanos"        → Arduino Nano ×2 (merged into existing entry)
+        Write these to inventory.json?
+```
+
+The generated `CLAUDE.md` instructs Claude to normalize each described part
+against the schema (reusing existing canonical names where the part already
+exists), ask clarifying questions for anything ambiguous — vague quantities,
+missing specs, unclear board identity — confirm the batch, then update
+`inventory.json`. "Used up four red LEDs" decrements the same way.
+
+**Naming-alias dataset.** Every normalized entry is also logged as one JSON
+line in `aliases.jsonl`, pairing your raw phrasing with the canonical name:
+
+```json
+{"raw": "a strip of neopixels", "name": "WS2812B LED strip (1 m)", "quantity": 1, "action": "added"}
+```
+
+Corrections and casual references get logged too — this file grows into the
+naming dataset a future vision module will use to map detected parts onto
+your inventory vocabulary.
+
+**Sync-back.** When the session ends, PartsMatcher validates the edited
+`inventory.json` and writes it back to your inventory file (previous version
+saved alongside as `<name>.bak`), and appends the session's new alias records
+to `<stem>.aliases.jsonl` next to it. Invalid edits never overwrite your
+file — you get a warning and the workspace path instead. When you're on the
+bundled sample data nothing is overwritten either; the summary tells you
+where the updated files live. `--no-sync` disables write-back entirely.
+
 ```console
 $ python -m partsmatcher chat my_inventory.json my_projects.json
 $ python -m partsmatcher chat --no-projects            # inventory only
@@ -191,6 +233,7 @@ python -m partsmatcher chat [INVENTORY_JSON] [PROJECTS_JSON] [options] [-- CLAUD
   --workdir DIR    session workspace (default: fresh temp dir)
   --prompt TEXT    opening prompt for the Claude session
   --claude-bin P   Claude Code binary to launch (default: claude)
+  --no-sync        keep inventory edits and alias records in the workspace
   --               everything after this is passed to claude verbatim
 
   --version        show version
@@ -259,7 +302,9 @@ The core logic is importable independently of the CLI
 vision pipeline can also call it directly. Chat mode already treats the
 inventory file as the shared source of truth — a future vision module that
 rewrites `inventory.json` feeds both the matcher and the Claude session with
-no further changes.
+no further changes. And the `*.aliases.jsonl` dataset that conversational
+intake accumulates (raw human phrasing → canonical part name) is exactly the
+vocabulary-mapping data that module will need to label what it sees.
 
 ## Development
 

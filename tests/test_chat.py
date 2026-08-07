@@ -48,6 +48,15 @@ class ContextMarkdownTests(unittest.TestCase):
         self.assertIn("No project database was loaded", text)
         self.assertNotIn("BUILD NOW", text)
 
+    def test_intake_instructions_cover_normalize_clarify_and_alias_log(self):
+        text = chat.build_context_markdown(sample_inventory(), None)
+        self.assertIn("## Inventory intake", text)
+        self.assertIn("Ask a clarifying question whenever an entry is ambiguous", text)
+        self.assertIn("aliases.jsonl", text)
+        self.assertIn('"raw"', text)
+        self.assertIn("append-only", text)
+        self.assertIn("vision module", text)
+
 
 class WorkspaceTests(unittest.TestCase):
     def test_creates_temp_workspace_with_context_and_data(self):
@@ -162,6 +171,136 @@ class RunChatTests(unittest.TestCase):
             context = Path(calls["cwd"], "CLAUDE.md").read_text(encoding="utf-8")
             self.assertIn("No project database was loaded", context)
 
+    def test_workspace_gets_seeded_alias_file(self):
+        seed = '{"raw": "nano", "name": "Arduino Nano"}\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            _, calls, _, _ = self.run_chat(workdir=tmp, alias_seed_text=seed)
+            self.assertEqual(
+                Path(calls["cwd"], "aliases.jsonl").read_text(encoding="utf-8"), seed
+            )
+
+
+def editing_launch(new_inventory=None, alias_lines=(), returns=0):
+    """A fake `claude` that edits workspace files, like intake mode would."""
+
+    def _launch(command, cwd=None):
+        if new_inventory is not None:
+            Path(cwd, "inventory.json").write_text(new_inventory, encoding="utf-8")
+        if alias_lines:
+            with open(Path(cwd, "aliases.jsonl"), "a", encoding="utf-8") as handle:
+                for line in alias_lines:
+                    handle.write(line + "\n")
+        return returns
+
+    return _launch
+
+
+class SyncBackTests(unittest.TestCase):
+    ORIGINAL = json.dumps(
+        {"parts": [{"name": "Red LED", "quantity": 6}]}, indent=2
+    )
+    UPDATED = json.dumps(
+        {
+            "parts": [
+                {"name": "Red LED", "quantity": 6},
+                {"name": "470 ohm resistor", "quantity": 25},
+            ]
+        },
+        indent=2,
+    )
+
+    def run_sync(self, launch, *, seed="", no_store=False, sync=True):
+        stack = tempfile.TemporaryDirectory()
+        tmp = stack.name
+        self.addCleanup(stack.cleanup)
+        source = Path(tmp, "inv.json")
+        source.write_text(self.ORIGINAL, encoding="utf-8")
+        alias_store = Path(tmp, "inv.aliases.jsonl")
+        if seed:
+            alias_store.write_text(seed, encoding="utf-8")
+        workdir = Path(tmp, "workspace")
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = chat.run_chat(
+                inventory=parse_inventory(json.loads(self.ORIGINAL)),
+                inventory_text=self.ORIGINAL,
+                inventory_store=None if no_store else source,
+                alias_store=None if no_store else alias_store,
+                alias_seed_text=seed,
+                sync=sync,
+                workdir=str(workdir),
+                which=lambda binary: f"/usr/local/bin/{binary}",
+                launch=launch,
+            )
+        return code, source, alias_store, workdir, stdout.getvalue()
+
+    def test_valid_inventory_edit_syncs_back_with_backup(self):
+        code, source, _, _, out = self.run_sync(
+            editing_launch(new_inventory=self.UPDATED)
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(source.read_text(encoding="utf-8"), self.UPDATED)
+        backup = source.with_name("inv.json.bak")
+        self.assertEqual(backup.read_text(encoding="utf-8"), self.ORIGINAL)
+        self.assertIn("inventory updated", out)
+        self.assertIn("1 → 2 part types, 6 → 31 parts", out)
+
+    def test_invalid_inventory_edit_never_touches_source(self):
+        code, source, _, workdir, out = self.run_sync(
+            editing_launch(new_inventory="{not json")
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(source.read_text(encoding="utf-8"), self.ORIGINAL)
+        self.assertFalse(source.with_name("inv.json.bak").exists())
+        self.assertIn("no longer validates", out)
+        self.assertIn(str(workdir), out)
+
+    def test_unchanged_inventory_is_left_alone(self):
+        code, source, _, _, out = self.run_sync(editing_launch())
+        self.assertEqual(code, 0)
+        self.assertFalse(source.with_name("inv.json.bak").exists())
+        self.assertNotIn("inventory updated", out)
+
+    def test_new_alias_records_append_to_store_skipping_malformed(self):
+        seed = '{"raw": "nano", "name": "Arduino Nano"}\n'
+        good = '{"raw": "a strip of neopixels", "name": "WS2812B LED strip (1 m)", "quantity": 1, "action": "added"}'
+        bad = "{not json"
+        incomplete = '{"raw": "orphan"}'
+        _, _, alias_store, _, out = self.run_sync(
+            editing_launch(alias_lines=[good, bad, incomplete]), seed=seed
+        )
+        content = alias_store.read_text(encoding="utf-8")
+        self.assertEqual(content, seed + good + "\n")
+        self.assertIn("1 naming-alias record(s) appended", out)
+        self.assertIn("skipped 2 malformed alias record(s)", out)
+
+    def test_sample_source_keeps_changes_in_workspace_only(self):
+        code, source, alias_store, workdir, out = self.run_sync(
+            editing_launch(
+                new_inventory=self.UPDATED,
+                alias_lines=['{"raw": "led", "name": "Red LED"}'],
+            ),
+            no_store=True,
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(source.read_text(encoding="utf-8"), self.ORIGINAL)
+        self.assertFalse(alias_store.exists())
+        self.assertIn("bundled sample", out)
+        self.assertIn("naming-alias record(s) captured", out)
+
+    def test_no_sync_leaves_everything_in_workspace(self):
+        code, source, alias_store, workdir, out = self.run_sync(
+            editing_launch(
+                new_inventory=self.UPDATED,
+                alias_lines=['{"raw": "led", "name": "Red LED"}'],
+            ),
+            sync=False,
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(source.read_text(encoding="utf-8"), self.ORIGINAL)
+        self.assertFalse(alias_store.exists())
+        self.assertIn("--no-sync", out)
+
 
 class CliRoutingTests(unittest.TestCase):
     def invoke(self, argv):
@@ -202,6 +341,34 @@ class CliRoutingTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             self.invoke(["match", "--", "--continue"])
         self.assertEqual(ctx.exception.code, 2)
+
+    def test_user_inventory_computes_persistent_stores(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            inventory = Path(tmp, "bench.json")
+            inventory.write_text(json.dumps([{"name": "Nut", "quantity": 4}]))
+            alias_store = Path(tmp, "bench.aliases.jsonl")
+            alias_store.write_text('{"raw": "nut", "name": "Nut"}\n')
+            with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
+                self.invoke(["chat", str(inventory), "--no-projects"])
+        kwargs = run_chat.call_args.kwargs
+        self.assertEqual(kwargs["inventory_store"], inventory)
+        self.assertEqual(kwargs["alias_store"], alias_store)
+        self.assertEqual(
+            kwargs["alias_seed_text"], '{"raw": "nut", "name": "Nut"}\n'
+        )
+        self.assertTrue(kwargs["sync"])
+
+    def test_sample_inventory_gets_no_persistent_stores(self):
+        with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
+            self.invoke(["chat"])
+        kwargs = run_chat.call_args.kwargs
+        self.assertIsNone(kwargs["inventory_store"])
+        self.assertIsNone(kwargs["alias_store"])
+
+    def test_no_sync_flag_passes_through(self):
+        with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
+            self.invoke(["chat", "--no-sync"])
+        self.assertFalse(run_chat.call_args.kwargs["sync"])
 
     def test_chat_schema_error_exits_2(self):
         with tempfile.TemporaryDirectory() as tmp:
