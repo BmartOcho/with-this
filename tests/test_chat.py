@@ -57,6 +57,21 @@ class ContextMarkdownTests(unittest.TestCase):
         self.assertIn("append-only", text)
         self.assertIn("vision module", text)
 
+    def test_photo_intake_instructions_always_present(self):
+        text = chat.build_context_markdown(sample_inventory(), None)
+        self.assertIn("## Photo intake — vision v1", text)
+        self.assertIn('"source": "photo"', text)
+        self.assertIn('"confidence"', text)
+        self.assertIn("Never write unconfirmed photo entries", text)
+        self.assertIn('"action": "photo"', text)
+        self.assertNotIn("Staged at launch", text)
+
+    def test_staged_photos_are_listed_in_context(self):
+        text = chat.build_context_markdown(
+            sample_inventory(), None, photo_names=["bench.jpg", "drawer.png"]
+        )
+        self.assertIn("Staged at launch: photos/bench.jpg, photos/drawer.png", text)
+
 
 class WorkspaceTests(unittest.TestCase):
     def test_creates_temp_workspace_with_context_and_data(self):
@@ -178,6 +193,46 @@ class RunChatTests(unittest.TestCase):
             self.assertEqual(
                 Path(calls["cwd"], "aliases.jsonl").read_text(encoding="utf-8"), seed
             )
+
+    def test_photos_are_staged_with_collision_handling(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            first = Path(source_dir, "a", "bench.jpg")
+            second = Path(source_dir, "b", "bench.jpg")
+            for photo in (first, second):
+                photo.parent.mkdir()
+                photo.write_bytes(b"\xff\xd8fake-jpeg")
+            with tempfile.TemporaryDirectory() as tmp:
+                _, calls, out, _ = self.run_chat(
+                    workdir=tmp, photos=[first, second]
+                )
+                photo_dir = Path(calls["cwd"], "photos")
+                self.assertEqual(
+                    sorted(p.name for p in photo_dir.iterdir()),
+                    ["bench-2.jpg", "bench.jpg"],
+                )
+                context = Path(calls["cwd"], "CLAUDE.md").read_text(encoding="utf-8")
+                self.assertIn(
+                    "Staged at launch: photos/bench.jpg, photos/bench-2.jpg", context
+                )
+                self.assertIn("2 photo(s) staged", out)
+
+    def test_photos_get_default_kickoff_prompt(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            photo = Path(source_dir, "bench.jpg")
+            photo.write_bytes(b"\xff\xd8fake-jpeg")
+            with tempfile.TemporaryDirectory() as tmp:
+                _, calls, _, _ = self.run_chat(workdir=tmp, photos=[photo])
+        self.assertEqual(calls["command"][-1], chat.DEFAULT_PHOTO_PROMPT)
+
+    def test_user_prompt_beats_default_photo_prompt(self):
+        with tempfile.TemporaryDirectory() as source_dir:
+            photo = Path(source_dir, "bench.jpg")
+            photo.write_bytes(b"\xff\xd8fake-jpeg")
+            with tempfile.TemporaryDirectory() as tmp:
+                _, calls, _, _ = self.run_chat(
+                    workdir=tmp, photos=[photo], prompt="Just say hi"
+                )
+        self.assertEqual(calls["command"][-1], "Just say hi")
 
 
 def editing_launch(new_inventory=None, alias_lines=(), returns=0):
@@ -369,6 +424,29 @@ class CliRoutingTests(unittest.TestCase):
         with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
             self.invoke(["chat", "--no-sync"])
         self.assertFalse(run_chat.call_args.kwargs["sync"])
+
+    def test_valid_photos_pass_through_to_run_chat(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            photo = Path(tmp, "bench.JPG")
+            photo.write_bytes(b"\xff\xd8fake-jpeg")
+            with mock.patch.object(chat, "run_chat", return_value=0) as run_chat:
+                code, _, _ = self.invoke(["chat", "--photo", str(photo)])
+        self.assertEqual(code, 0)
+        self.assertEqual(run_chat.call_args.kwargs["photos"], [photo])
+
+    def test_missing_photo_exits_2(self):
+        code, _, err = self.invoke(["chat", "--photo", "/nope/bench.jpg"])
+        self.assertEqual(code, 2)
+        self.assertIn("photo not found", err)
+
+    def test_unsupported_photo_type_exits_2(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp, "scan.pdf")
+            bad.write_bytes(b"%PDF-fake")
+            code, _, err = self.invoke(["chat", "--photo", str(bad)])
+        self.assertEqual(code, 2)
+        self.assertIn("unsupported photo type", err)
+        self.assertIn(".png", err)
 
     def test_chat_schema_error_exits_2(self):
         with tempfile.TemporaryDirectory() as tmp:
