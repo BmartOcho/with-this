@@ -1,0 +1,135 @@
+{
+  "projects": [
+    {
+      "name": "Blink Badge",
+      "description": "The hello-world wearable: one red LED pulsing on a Nano you can clip to your shirt.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Red LED", "quantity": 1 },
+        { "name": "220 ohm resistor", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 2 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "Reaction Timer",
+      "description": "Two players, two buttons, one LED — first press after the light wins.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Breadboard", "quantity": 1 },
+        { "name": "Red LED", "quantity": 2 },
+        { "name": "220 ohm resistor", "quantity": 2 },
+        { "name": "Tactile pushbutton", "quantity": 2 },
+        { "name": "Jumper wire", "quantity": 8 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "Sunset Night-Light",
+      "description": "A photoresistor watches the room and fades the LED up as it gets dark.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Breadboard", "quantity": 1 },
+        { "name": "Photoresistor (LDR)", "quantity": 1 },
+        { "name": "10k ohm resistor", "quantity": 1 },
+        { "name": "Red LED", "quantity": 1 },
+        { "name": "220 ohm resistor", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 6 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "LED Dice",
+      "description": "Mash the button to roll seven LEDs arranged like dice pips.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Breadboard", "quantity": 1 },
+        { "name": "Red LED", "quantity": 7 },
+        { "name": "220 ohm resistor", "quantity": 7 },
+        { "name": "Tactile pushbutton", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 10 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "Servo Radar Sweep",
+      "description": "An ultrasonic sensor on a sweeping servo, plotting distances like a radar.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Breadboard", "quantity": 1 },
+        { "name": "HC-SR04 ultrasonic sensor", "quantity": 1 },
+        { "name": "SG90 micro servo", "quantity": 1 },
+        { "name": "16x2 I2C LCD", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 12 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "Traffic Light Trainer",
+      "description": "A classic red/yellow/green intersection with a pedestrian button.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Breadboard", "quantity": 1 },
+        { "name": "Red LED", "quantity": 1 },
+        { "name": "Yellow LED", "quantity": 1 },
+        { "name": "Green LED", "quantity": 1 },
+        { "name": "220 ohm resistor", "quantity": 3 },
+        { "name": "Tactile pushbutton", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 8 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "Ultrasonic Noise Wand",
+      "description": "Wave your hand to bend the buzzer's pitch, theremin style.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Breadboard", "quantity": 1 },
+        { "name": "HC-SR04 ultrasonic sensor", "quantity": 1 },
+        { "name": "Piezo buzzer", "quantity": 1 },
+        { "name": "10k potentiometer", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 6 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "Desk Weather Station",
+      "description": "Temperature, humidity, and pressure logged to an SD card and shown on an LCD.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Breadboard", "quantity": 1 },
+        { "name": "BME280 sensor", "quantity": 1 },
+        { "name": "16x2 I2C LCD", "quantity": 1 },
+        { "name": "MicroSD card module", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 10 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    },
+    {
+      "name": "Line-Follower Robot",
+      "description": "A two-motor robot that hunts a black tape line across the floor.",
+      "parts": [
+        { "name": "Arduino Uno", "quantity": 1 },
+        { "name": "L298N motor driver", "quantity": 1 },
+        { "name": "DC gear motor", "quantity": 2 },
+        { "name": "IR reflectance sensor", "quantity": 2 },
+        { "name": "Robot chassis kit", "quantity": 1 },
+        { "name": "AA battery holder", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 15 }
+      ]
+    },
+    {
+      "name": "4x4x4 LED Cube",
+      "description": "Sixty-four LEDs in a soldered lattice, animated with shift registers.",
+      "parts": [
+        { "name": "Arduino Nano", "quantity": 1 },
+        { "name": "Red LED", "quantity": 64 },
+        { "name": "74HC595 shift register", "quantity": 4 },
+        { "name": "220 ohm resistor", "quantity": 16 },
+        { "name": "Perfboard", "quantity": 1 },
+        { "name": "Jumper wire", "quantity": 30 },
+        { "name": "USB cable", "quantity": 1 }
+      ]
+    }
+  ]
+}

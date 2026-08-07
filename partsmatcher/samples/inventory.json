@@ -1,0 +1,19 @@
+{
+  "parts": [
+    { "name": "Arduino Nano", "quantity": 2, "source": "starter kit" },
+    { "name": "Breadboard", "quantity": 2 },
+    { "name": "Red LED", "quantity": 6, "source": "parts drawer 3" },
+    { "name": "RGB LED", "quantity": 1 },
+    { "name": "220 ohm resistor", "quantity": 20 },
+    { "name": "10k ohm resistor", "quantity": 10 },
+    { "name": "Tactile pushbutton", "quantity": 4 },
+    { "name": "Piezo buzzer", "quantity": 1 },
+    { "name": "HC-SR04 ultrasonic sensor", "quantity": 1 },
+    { "name": "SG90 micro servo", "quantity": 1 },
+    { "name": "Photoresistor (LDR)", "quantity": 2 },
+    { "name": "Jumper wire", "quantity": 40 },
+    { "name": "USB cable", "quantity": 1 },
+    { "name": "74HC595 shift register", "quantity": 1 },
+    { "name": "9V battery clip", "quantity": 1 }
+  ]
+}

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "partsmatcher"
+version = "0.2.0"
+description = "Match the parts you own against a project database: what can you build right now, and what are you one or two parts away from? Includes a chat mode powered by your local Claude Code."
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["inventory", "parts", "maker", "electronics", "cli"]
+
+[project.scripts]
+partsmatcher = "partsmatcher.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["partsmatcher*"]
+
+[tool.setuptools.package-data]
+partsmatcher = ["samples/*.json"]
