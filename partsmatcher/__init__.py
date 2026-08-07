@@ -15,7 +15,7 @@ from .matcher import (
     parse_projects,
 )
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 __all__ = [
     "DEFAULT_ALMOST_THRESHOLD",

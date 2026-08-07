@@ -10,6 +10,9 @@ One inventory JSON is the shared source of truth for both modes:
 
 - `partsmatcher match` — fast deterministic report, fully offline
 - `partsmatcher chat` — hands the same inventory to your local `claude`
+- `partsmatcher app` — the same chat session in your browser: embedded chat
+  beside a live inventory and match report (still your local `claude`,
+  driven headlessly one turn at a time; still zero dependencies)
 
 The matcher reads two JSON files — your parts inventory and a project
 database — and sorts every project into three groups:
@@ -234,6 +237,34 @@ overwritten — pick a different `--workdir` instead.
 
 The deterministic matcher never requires Claude to be installed; `match`
 stays fully offline.
+
+## The local app
+
+`partsmatcher app` serves the same session as a browser page instead of
+handing over the terminal:
+
+```console
+$ python -m partsmatcher app my_inventory.json my_projects.json
+```
+
+The page pairs an embedded chat with a live sidebar — your inventory and
+the deterministic match report, re-read from the workspace after every
+turn, so intake and reconciliation update them as you talk. Under the
+hood each message runs your local `claude` headlessly for one turn
+(`claude -p --resume` — same login, no API key, no new dependencies:
+the server is stdlib `http.server`, the page a single embedded file).
+
+The workspace mechanics are chat's, unchanged: generated `CLAUDE.md`
+context, alias logging, validated sync-back with `.bak` backups, and
+`recover` if the app dies uncleanly. Because headless turns can't show
+interactive permission prompts, the workspace pre-authorizes exactly what
+sessions do anyway (editing the workspace files, re-running the matcher)
+via a generated `.claude/settings.local.json`.
+
+Sync runs when you click **End session & sync** (which also stops the
+app) or on Ctrl-C in the terminal. Flags mirror `chat` (`--photo`,
+`--prompt`, `--workdir`, `--no-projects`, `--no-sync`), plus `--port N`
+and `--no-browser`.
 
 ## Input formats
 
