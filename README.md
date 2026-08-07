@@ -82,8 +82,9 @@ What happens at startup:
    if it doesn't (`npm install -g @anthropic-ai/claude-code`).
 2. A session workspace is prepared (a fresh temp directory by default) with a
    generated `CLAUDE.md` containing the inventory, the deterministic match
-   report, and workbench-assistant guidance — plus copies of `inventory.json`
-   and `projects.json`.
+   report, workbench-assistant guidance, and a ready-to-run matcher command
+   (so Claude can re-check the report itself as the inventory changes) —
+   plus copies of `inventory.json` and `projects.json`.
 3. `claude` is spawned in that workspace with your real terminal attached.
    Claude Code reads `CLAUDE.md` at session start, so the chat opens already
    knowing every part you own, quantities included.
@@ -143,6 +144,18 @@ to `<stem>.aliases.jsonl` next to it. Invalid edits never overwrite your
 file — you get a warning and the workspace path instead. When you're on the
 bundled sample data nothing is overwritten either; the summary tells you
 where the updated files live. `--no-sync` disables write-back entirely.
+
+**Recovery.** If a session dies before that exit sync can run — a closed
+terminal window, a crash — nothing is lost. Every session records what the
+sync needs inside its workspace, so afterward:
+
+```console
+$ python -m partsmatcher recover
+```
+
+re-runs the same validate-and-sync against the newest recoverable workspace
+(pass a workspace path to pick a specific one). It's safe to re-run:
+files already in sync are detected and left alone.
 
 ### Photo intake — vision v1
 
@@ -279,6 +292,12 @@ python -m partsmatcher chat [INVENTORY_JSON] [PROJECTS_JSON] [options] [-- CLAUD
   --claude-bin P   Claude Code binary to launch (default: claude)
   --no-sync        keep inventory edits and alias records in the workspace
   --               everything after this is passed to claude verbatim
+
+python -m partsmatcher recover [WORKSPACE_DIR]
+
+  re-run the end-of-session sync for a chat session that ended without a
+  clean exit — closed terminal, crash — validating and backing up exactly
+  like the normal exit path (default: the newest recoverable workspace)
 
   --version        show version
 ```

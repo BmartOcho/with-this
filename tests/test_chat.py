@@ -81,6 +81,22 @@ class ContextMarkdownTests(unittest.TestCase):
         )
         self.assertIn("Staged at launch: photos/bench.jpg, photos/drawer.png", text)
 
+    def test_match_command_is_embedded_when_provided(self):
+        command = (
+            "PYTHONPATH=/repo /usr/bin/python3 -m partsmatcher match "
+            "inventory.json projects.json"
+        )
+        text = chat.build_context_markdown(
+            sample_inventory(), None, match_command=command
+        )
+        self.assertIn("run it yourself from this folder", text)
+        self.assertIn(command, text)
+        self.assertNotIn("The user can re-run", text)
+
+    def test_without_match_command_keeps_user_facing_hint(self):
+        text = chat.build_context_markdown(sample_inventory(), None)
+        self.assertIn("The user can re-run `python -m partsmatcher match`", text)
+
 
 class WorkspaceTests(unittest.TestCase):
     def test_creates_temp_workspace_with_context_and_data(self):
@@ -243,6 +259,58 @@ class RunChatTests(unittest.TestCase):
                 )
         self.assertEqual(calls["command"][-1], "Just say hi")
 
+    def test_context_carries_runnable_match_command_with_projects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, calls, _, _ = self.run_chat(workdir=tmp)
+            context = Path(calls["cwd"], "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertIn("PYTHONPATH=", context)
+        self.assertIn("-m partsmatcher match inventory.json projects.json", context)
+
+    def test_no_projects_context_omits_match_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, calls, _, _ = self.run_chat(
+                workdir=tmp, report=None, projects_text=None
+            )
+            context = Path(calls["cwd"], "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertNotIn("PYTHONPATH=", context)
+
+    def test_banner_mentions_recover(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, out, _ = self.run_chat(workdir=tmp)
+        self.assertIn("partsmatcher recover", out)
+
+    def test_session_record_written_with_stores_and_seed_count(self):
+        seed = '{"raw": "nano", "name": "Arduino Nano"}\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp, "inv.json")
+            aliases = Path(tmp, "inv.aliases.jsonl")
+            _, calls, _, _ = self.run_chat(
+                workdir=str(Path(tmp, "ws")),
+                alias_seed_text=seed,
+                inventory_store=store,
+                alias_store=aliases,
+            )
+            record = json.loads(
+                Path(calls["cwd"], chat.SESSION_FILENAME).read_text(
+                    encoding="utf-8"
+                )
+            )
+        self.assertEqual(record["inventory_store"], str(store))
+        self.assertEqual(record["alias_store"], str(aliases))
+        self.assertEqual(record["alias_seed_count"], 1)
+        self.assertEqual(record["original_inventory"], "[]")
+
+    def test_session_record_null_stores_for_sample_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, calls, _, _ = self.run_chat(workdir=tmp)
+            record = json.loads(
+                Path(calls["cwd"], chat.SESSION_FILENAME).read_text(
+                    encoding="utf-8"
+                )
+            )
+        self.assertIsNone(record["inventory_store"])
+        self.assertIsNone(record["alias_store"])
+
 
 def editing_launch(new_inventory=None, alias_lines=(), returns=0):
     """A fake `claude` that edits workspace files, like intake mode would."""
@@ -366,6 +434,139 @@ class SyncBackTests(unittest.TestCase):
         self.assertIn("--no-sync", out)
 
 
+class RecoverTests(unittest.TestCase):
+    ORIGINAL = SyncBackTests.ORIGINAL
+    UPDATED = SyncBackTests.UPDATED
+    SEED = '{"raw": "nano", "name": "Arduino Nano"}\n'
+    NEW_ALIAS = (
+        '{"raw": "buck module", "name": "LM2596 buck converter module", '
+        '"quantity": 1, "action": "photo"}'
+    )
+
+    def abandoned_session(self, tmp, name="partsmatcher-chat-test", edit=True):
+        """Run a session with sync suppressed — the workspace is left exactly
+        as a closed terminal would leave it (session record included)."""
+        source = Path(tmp, "inv.json")
+        if not source.exists():
+            source.write_text(self.ORIGINAL, encoding="utf-8")
+        alias_store = Path(tmp, "inv.aliases.jsonl")
+        if not alias_store.exists():
+            alias_store.write_text(self.SEED, encoding="utf-8")
+        workdir = Path(tmp, name)
+        launch = editing_launch(
+            new_inventory=self.UPDATED if edit else None,
+            alias_lines=[self.NEW_ALIAS] if edit else (),
+        )
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            chat.run_chat(
+                inventory=parse_inventory(json.loads(self.ORIGINAL)),
+                inventory_text=self.ORIGINAL,
+                inventory_store=source,
+                alias_store=alias_store,
+                alias_seed_text=self.SEED,
+                sync=False,
+                workdir=str(workdir),
+                which=lambda binary: f"/usr/local/bin/{binary}",
+                launch=launch,
+            )
+        return source, alias_store, workdir
+
+    def recover(self, *args, **kwargs):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = chat.recover_session(*args, **kwargs)
+        return code, stdout.getvalue()
+
+    def test_explicit_workspace_syncs_files_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, alias_store, workdir = self.abandoned_session(tmp)
+            code, out = self.recover(str(workdir))
+            self.assertEqual(code, 0)
+            self.assertEqual(source.read_text(encoding="utf-8"), self.UPDATED)
+            self.assertEqual(
+                source.with_name("inv.json.bak").read_text(encoding="utf-8"),
+                self.ORIGINAL,
+            )
+            self.assertEqual(
+                alias_store.read_text(encoding="utf-8"),
+                self.SEED + self.NEW_ALIAS + "\n",
+            )
+        self.assertIn("recovering chat session", out)
+        self.assertIn("inventory updated", out)
+        self.assertIn("1 naming-alias record(s) appended", out)
+
+    def test_recover_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, alias_store, workdir = self.abandoned_session(tmp)
+            self.recover(str(workdir))
+            code, out = self.recover(str(workdir))
+            self.assertEqual(code, 0)
+            self.assertEqual(source.read_text(encoding="utf-8"), self.UPDATED)
+            self.assertEqual(
+                source.with_name("inv.json.bak").read_text(encoding="utf-8"),
+                self.ORIGINAL,
+            )
+            self.assertEqual(
+                alias_store.read_text(encoding="utf-8"),
+                self.SEED + self.NEW_ALIAS + "\n",
+            )
+        self.assertIn("already in sync", out)
+        self.assertIn("nothing new to append", out)
+
+    def test_picks_newest_workspace_when_unspecified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, _, old_ws = self.abandoned_session(
+                tmp, name="partsmatcher-chat-old", edit=False
+            )
+            self.abandoned_session(tmp, name="partsmatcher-chat-new")
+            os.utime(old_ws / chat.SESSION_FILENAME, (0, 0))
+            code, out = self.recover(tmp_root=Path(tmp))
+            self.assertEqual(code, 0)
+            self.assertEqual(source.read_text(encoding="utf-8"), self.UPDATED)
+        self.assertIn("2 recoverable workspaces found", out)
+        self.assertIn("partsmatcher-chat-new", out)
+
+    def test_no_candidates_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(PartsMatcherError) as ctx:
+                chat.recover_session(tmp_root=Path(tmp))
+        self.assertIn("no recoverable chat workspaces", str(ctx.exception))
+
+    def test_workspace_without_session_record_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(PartsMatcherError) as ctx:
+                chat.recover_session(tmp)
+        self.assertIn("not a recoverable chat workspace", str(ctx.exception))
+
+    def test_unchanged_session_reports_nothing_to_recover(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, alias_store, workdir = self.abandoned_session(tmp, edit=False)
+            code, out = self.recover(str(workdir))
+            self.assertEqual(code, 0)
+            self.assertEqual(source.read_text(encoding="utf-8"), self.ORIGINAL)
+            self.assertFalse(source.with_name("inv.json.bak").exists())
+        self.assertIn("nothing to recover", out)
+
+    def test_sample_session_recovery_touches_no_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp, "ws")
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                chat.run_chat(
+                    inventory=parse_inventory(json.loads(self.ORIGINAL)),
+                    inventory_text=self.ORIGINAL,
+                    sync=False,
+                    workdir=str(workdir),
+                    which=lambda binary: f"/usr/local/bin/{binary}",
+                    launch=editing_launch(
+                        new_inventory=self.UPDATED, alias_lines=[self.NEW_ALIAS]
+                    ),
+                )
+            code, out = self.recover(str(workdir))
+            self.assertEqual(code, 0)
+        self.assertIn("bundled sample", out)
+        self.assertIn("naming-alias record(s) captured", out)
+
+
 class CliRoutingTests(unittest.TestCase):
     def invoke(self, argv):
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -465,6 +666,32 @@ class CliRoutingTests(unittest.TestCase):
             code, _, err = self.invoke(["chat", bad])
         self.assertEqual(code, 2)
         self.assertIn("'name' must be a non-empty string", err)
+
+    def test_recover_routes_to_recover_session(self):
+        with mock.patch.object(chat, "recover_session", return_value=0) as rec:
+            code, _, _ = self.invoke(["recover"])
+        self.assertEqual(code, 0)
+        rec.assert_called_once_with(None)
+
+    def test_recover_accepts_workspace_path(self):
+        with mock.patch.object(chat, "recover_session", return_value=0) as rec:
+            self.invoke(["recover", "/tmp/ws"])
+        rec.assert_called_once_with("/tmp/ws")
+
+    def test_recover_error_exits_2(self):
+        with mock.patch.object(
+            chat,
+            "recover_session",
+            side_effect=PartsMatcherError("no recoverable chat workspaces"),
+        ):
+            code, _, err = self.invoke(["recover"])
+        self.assertEqual(code, 2)
+        self.assertIn("no recoverable chat workspaces", err)
+
+    def test_recover_rejects_claude_passthrough(self):
+        with self.assertRaises(SystemExit) as ctx:
+            self.invoke(["recover", "--", "--continue"])
+        self.assertEqual(ctx.exception.code, 2)
 
 
 if __name__ == "__main__":
