@@ -14,7 +14,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from partsmatcher import app as app_module
-from partsmatcher import cli, match, parse_inventory, parse_projects
+from partsmatcher import chat, cli, match, parse_inventory, parse_projects
 from partsmatcher.app.runner import ClaudeTurnRunner
 from partsmatcher.app.server import AppState, make_server
 
@@ -287,6 +287,56 @@ class ServerTests(ServerTestCase):
         self.assertEqual(status, 409)
 
 
+class SlowRunner:
+    """A turn that blocks until the test releases it — for the 409 guard."""
+
+    def __init__(self):
+        self.session_id = None
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def run_turn(self, message):
+        self.started.set()
+        self.release.wait(timeout=10)
+        yield {"type": "done", "ok": True, "result": ""}
+
+
+class ConcurrentSendTests(ServerTestCase):
+    def test_second_send_during_a_turn_gets_409(self):
+        slow = SlowRunner()
+        self.state.runner = slow
+        first: "dict" = {}
+
+        def send_first():
+            first["status"], first["data"] = self.request(
+                "POST", "/api/message", body={"text": "long turn"}
+            )
+
+        thread = threading.Thread(target=send_first)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(slow.release.set)
+        self.assertTrue(slow.started.wait(timeout=10))
+        status, data = self.request("POST", "/api/message", body={"text": "again"})
+        self.assertEqual(status, 409)
+        self.assertIn(b"already in progress", data)
+        slow.release.set()
+        thread.join(timeout=10)
+        self.assertEqual(first["status"], 200)
+        self.assertIn(b'"done"', first["data"])
+
+
+class PageContractTests(unittest.TestCase):
+    def test_page_fetches_state_exactly_once_on_load(self):
+        # /api/state hands the kickoff out exactly once, so the page must
+        # read it from its single refreshState() fetch — a second startup
+        # fetch would find the kickoff already consumed and never fire it.
+        from partsmatcher.app.page import PAGE_HTML
+
+        self.assertEqual(PAGE_HTML.count("fetch('/api/state')"), 1)
+        self.assertIn("const state = await refreshState()", PAGE_HTML)
+
+
 class RunAppTests(unittest.TestCase):
     def test_missing_claude_binary_errors_with_hint(self):
         inventory = parse_inventory(
@@ -337,6 +387,50 @@ class RunAppTests(unittest.TestCase):
                 any("partsmatcher match" in entry for entry in allow)
             )
             self.assertIn("Serving on http://", stdout.getvalue())
+
+
+class AppRecoverTests(unittest.TestCase):
+    def test_killed_app_session_recovers_unsynced_changes(self):
+        # serve=False returns before any sync runs — the same on-disk state
+        # an app killed mid-session leaves behind: a session record plus
+        # workspace edits that never flowed back to the user's file.
+        inventory_text = cli.SAMPLE_INVENTORY.read_text(encoding="utf-8")
+        inventory = parse_inventory(json.loads(inventory_text))
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "my_inventory.json"
+            store.write_text(inventory_text, encoding="utf-8")
+            workdir = Path(tmp) / "workspace"
+            with redirect_stdout(io.StringIO()):
+                code = app_module.run_app(
+                    inventory=inventory,
+                    inventory_text=inventory_text,
+                    inventory_store=store,
+                    workdir=str(workdir),
+                    which=lambda name: "/bin/claude",
+                    serve=False,
+                )
+            self.assertEqual(code, 0)
+            edited = json.loads(
+                (workdir / "inventory.json").read_text(encoding="utf-8")
+            )
+            edited["parts"][0]["quantity"] += 1
+            edited_text = json.dumps(edited, indent=2)
+            (workdir / "inventory.json").write_text(edited_text, encoding="utf-8")
+
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = chat.recover_session(str(workdir))
+            self.assertEqual(code, 0)
+            self.assertEqual(
+                json.loads(store.read_text(encoding="utf-8")), edited
+            )
+
+            # And it stays idempotent: a second recover re-writes nothing.
+            again = io.StringIO()
+            with redirect_stdout(again):
+                code = chat.recover_session(str(workdir))
+            self.assertEqual(code, 0)
+            self.assertIn("already", again.getvalue())
 
 
 class CliAppTests(unittest.TestCase):
