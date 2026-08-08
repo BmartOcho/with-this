@@ -118,6 +118,11 @@ function setBusy(value) {
 async function refreshState() {
   const res = await fetch('/api/state');
   const state = await res.json();
+  renderState(state);
+  return state;
+}
+
+function renderState(state) {
   const inv = document.getElementById('inventory');
   inv.innerHTML = '';
   document.getElementById('invcount').textContent =
@@ -131,6 +136,7 @@ async function refreshState() {
   }
   const rep = document.getElementById('report');
   rep.innerHTML = '';
+  rep.className = '';
   if (!state.report) {
     rep.textContent = state.report_error || 'No project database loaded.';
     rep.className = 'msg meta'; return;
@@ -144,14 +150,22 @@ async function refreshState() {
     const div = document.createElement('div'); div.className = 'grp ' + cls;
     const name = document.createElement('div'); name.className = 'name';
     name.textContent = label + ' (' + items.length + ')';
-    const ul = document.createElement('ul');
-    for (const p of items) {
-      const li = document.createElement('li');
-      li.textContent = p.name;
-      const s = document.createElement('span'); s.className = 'short';
-      s.textContent = suffix(p); li.appendChild(s); ul.appendChild(li);
+    div.appendChild(name);
+    if (items.length) {
+      const ul = document.createElement('ul');
+      for (const p of items) {
+        const li = document.createElement('li');
+        li.textContent = p.name;
+        const extra = suffix(p);
+        if (extra) {
+          const s = document.createElement('span'); s.className = 'short';
+          s.textContent = extra; li.appendChild(s);
+        }
+        ul.appendChild(li);
+      }
+      div.appendChild(ul);
     }
-    div.append(name, ul); rep.appendChild(div);
+    rep.appendChild(div);
   }
 }
 
@@ -224,9 +238,10 @@ endBtn.addEventListener('click', async () => {
 });
 
 (async () => {
-  await refreshState();
-  const res = await fetch('/api/state');
-  const state = await res.json();
+  // One fetch only: /api/state hands the kickoff out exactly once, so a
+  // second fetch here would find it already consumed (and a page reload
+  // correctly gets none — the session resumes without re-firing it).
+  const state = await refreshState();
   if (state.kickoff) sendTurn(state.kickoff, null);
   else setBusy(false);
 })();

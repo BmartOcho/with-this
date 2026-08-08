@@ -44,18 +44,24 @@ vision scanner will eventually consume.
 
 ## Next
 
-- **App v1 hardening, remainder:** the first real run (2026-08-08)
-  passed the core loop; still unverified: tab-reload continuity
-  (`--resume` across a page reload, kickoff not re-firing), the
-  double-send 409 guard, and a true kill-then-`recover` with UNsynced
-  changes (the run only exercised the easy already-synced case). One
-  cosmetic suspect: a stray empty bullet under "ALMOST THERE (0)" in the
-  sidebar — confirm on screen, fix if real. Ben's per-turn latency
-  verdict is pending; the doc's 1C option (one long-lived stream-json
-  process) is the planned upgrade path if spawning grates — the runner
-  interface was shaped so it can slot in behind the server unchanged.
-  Also noted: chat workspaces accumulate in the temp dir (recover found
-  2) — maybe a `recover --list`/cleanup nicety.
+- **App v1 hardening, remainder — mostly closed (2026-08-08):** the
+  hardening pass found and fixed a real kickoff bug: the page's startup
+  double-fetched `/api/state`, and the first fetch consumed the one-shot
+  kickoff before the second looked for it — so the default greeting
+  never actually fired in the app (a page-contract test now pins the
+  single-fetch pattern). Tab-reload continuity rides the same mechanism
+  and is covered server-side (kickoff handed out exactly once;
+  `--resume` state lives in the server process, untouched by reload).
+  The double-send 409 guard and kill-then-`recover` with UNsynced
+  changes through an app-created workspace both have tests now. The
+  sidebar renderer was hardened (empty groups no longer emit an empty
+  `<ul>`, empty suffix spans skipped, stale `msg meta` class reset) —
+  code audit found no path that emits an empty bullet, so Ben should
+  still eyeball "ALMOST THERE (0)" on the next real run. Still open:
+  Ben's per-turn latency verdict — the doc's 1C option (one long-lived
+  stream-json process) is the planned upgrade path if spawning grates —
+  and the temp-dir workspace accumulation (`recover --list`/cleanup
+  nicety).
 - **Standalone batch scanner** — unchanged in scope (photos in,
   inventory JSON out, no conversation; the inventory schema is its
   contract and `*.aliases.jsonl` supplies the naming vocabulary, 67
@@ -78,7 +84,7 @@ vision scanner will eventually consume.
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
   command → CI → project-database intake → kickoff greeting polish →
   local app).
-- 127 stdlib `unittest` tests; the chat and app tests inject fakes, so the suite
+- 130 stdlib `unittest` tests; the chat and app tests inject fakes, so the suite
   never needs Claude installed. CI: GitHub Actions runs the suite plus a
   sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
 - User-side data lives on Ben's machine, not in this repo:
