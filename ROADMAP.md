@@ -17,6 +17,13 @@ vision scanner will eventually consume.
   a generated workspace allowlist (`.claude/settings.local.json`);
   `recover` covers unclean exits unchanged. The `chat` and `app`
   commands share one input-loading path in the CLI.
+- **Live-fire validated on Ben's Mac (2026-08-08), same day it merged:**
+  a real session did plain-language intake (NeoPixel strip ×1 added, 10k
+  resistor merged 20 → 22), Claude re-ran the matcher itself through the
+  generated allowlist (the biggest headless unknown — the `Bash` pattern
+  held), the sidebar refreshed live to 59 types / 547 parts, sync landed
+  in the real files (aliases 67 → 69), and a post-sync `recover` was
+  correctly idempotent ("already in sync", nothing re-appended).
 - **Authoring test: run and passed (2026-08-07).** One session built
   `my_projects.json` from nothing: 8 sample projects adapted with honest
   substitutions (UNO + Type-B throughout; DHT11-for-BME280 with serial
@@ -37,12 +44,18 @@ vision scanner will eventually consume.
 
 ## Next
 
-- **App v1 hardening from Ben's first real run:** live-fire the headless
-  turn loop against Ben's actual `claude` install (stream-json shapes,
-  the allowlist actually covering what sessions do, per-turn latency
-  feel). The doc's 1C option (one long-lived stream-json process) is the
-  planned upgrade path if per-turn spawn grates — the runner interface
-  was shaped so it can slot in behind the server unchanged.
+- **App v1 hardening, remainder:** the first real run (2026-08-08)
+  passed the core loop; still unverified: tab-reload continuity
+  (`--resume` across a page reload, kickoff not re-firing), the
+  double-send 409 guard, and a true kill-then-`recover` with UNsynced
+  changes (the run only exercised the easy already-synced case). One
+  cosmetic suspect: a stray empty bullet under "ALMOST THERE (0)" in the
+  sidebar — confirm on screen, fix if real. Ben's per-turn latency
+  verdict is pending; the doc's 1C option (one long-lived stream-json
+  process) is the planned upgrade path if spawning grates — the runner
+  interface was shaped so it can slot in behind the server unchanged.
+  Also noted: chat workspaces accumulate in the temp dir (recover found
+  2) — maybe a `recover --list`/cleanup nicety.
 - **Standalone batch scanner** — unchanged in scope (photos in,
   inventory JSON out, no conversation; the inventory schema is its
   contract and `*.aliases.jsonl` supplies the naming vocabulary, 67
@@ -59,7 +72,7 @@ vision scanner will eventually consume.
   specificity-preserving renames (reconcile currently trades detail for
   match-ability: "Breadboard (830 tie-points)" → "Breadboard").
 
-## State notes (2026-08-07)
+## State notes (2026-08-08)
 
 - `main` = v0.7.0 (matcher → chat mode → conversational intake → photo
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
@@ -69,6 +82,8 @@ vision scanner will eventually consume.
   never needs Claude installed. CI: GitHub Actions runs the suite plus a
   sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
 - User-side data lives on Ben's machine, not in this repo:
-  `my_inventory.json` (58 part types / 544 parts, two entries with photo
-  provenance), `my_projects.json` (11 projects, all BUILD NOW), their
-  `.bak` files, and `my_inventory.aliases.jsonl` (67 records).
+  `my_inventory.json` (59 part types / 547 parts — the WS2812B NeoPixel
+  strip arrived via the app on 2026-08-08), `my_projects.json`
+  (11 projects, all BUILD NOW; nothing uses the NeoPixels yet — the
+  session offered an ambient-desk-light project, not yet taken),
+  their `.bak` files, and `my_inventory.aliases.jsonl` (69 records).
