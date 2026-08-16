@@ -241,7 +241,9 @@ def build_parser() -> argparse.ArgumentParser:
             "session died before it could flow inventory edits and new "
             "alias records back to your files (closed terminal, crash). "
             "Same validation and .bak backup as the normal exit; safe to "
-            "re-run — files already in sync are left alone."
+            "re-run — files already in sync are left alone. --list surveys "
+            "the leftover workspaces piling up in the temp directory and "
+            "--clean deletes the ones with nothing left to sync."
         ),
     )
     recover_parser.add_argument(
@@ -252,6 +254,29 @@ def build_parser() -> argparse.ArgumentParser:
             "chat workspace directory to sync back (default: the newest "
             "recoverable workspace in the system temp directory)"
         ),
+    )
+    recover_mode = recover_parser.add_mutually_exclusive_group()
+    recover_mode.add_argument(
+        "--list",
+        dest="list_workspaces",
+        action="store_true",
+        help=(
+            "list every recoverable workspace, its age, and what each still "
+            "owes your files — then exit without syncing anything"
+        ),
+    )
+    recover_mode.add_argument(
+        "--clean",
+        action="store_true",
+        help=(
+            "delete leftover workspaces whose changes are already synced "
+            "back; ones still holding changes are kept and reported"
+        ),
+    )
+    recover_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="with --clean, delete workspaces holding unsynced changes too",
     )
     return parser
 
@@ -524,6 +549,17 @@ def _run_recover(args: argparse.Namespace) -> int:
     from . import chat  # imported lazily: `match` never touches chat machinery
 
     try:
+        if args.force and not args.clean:
+            raise PartsMatcherError("--force only applies to --clean")
+        if args.list_workspaces or args.clean:
+            if args.workspace is not None:
+                raise PartsMatcherError(
+                    "--list and --clean survey the whole temp directory — "
+                    "drop the workspace path"
+                )
+            if args.clean:
+                return chat.clean_workspaces(force=args.force)
+            return chat.list_workspaces()
         return chat.recover_session(args.workspace)
     except PartsMatcherError as exc:
         print(f"partsmatcher: error: {exc}", file=sys.stderr)
