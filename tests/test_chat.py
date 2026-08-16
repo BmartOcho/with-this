@@ -764,6 +764,172 @@ class RecoverTests(unittest.TestCase):
         self.assertIn("naming-alias record(s) captured", out)
 
 
+class WorkspaceStatusTests(unittest.TestCase):
+    """`recover --list` / `--clean`: what a leftover workspace still owes."""
+
+    ORIGINAL = RecoverTests.ORIGINAL
+    UPDATED = RecoverTests.UPDATED
+    SEED = RecoverTests.SEED
+    NEW_ALIAS = RecoverTests.NEW_ALIAS
+    abandoned_session = RecoverTests.abandoned_session
+
+    def capture(self, call, *args, **kwargs):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = call(*args, **kwargs)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_edited_workspace_owes_inventory_and_aliases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, alias_store, workdir = self.abandoned_session(tmp)
+            status = chat.inspect_workspace(workdir)
+        self.assertFalse(status.synced)
+        self.assertIsNone(status.error)
+        self.assertEqual(len(status.pending), 2)
+        self.assertIn(f"inventory edits not yet written to {source}", status.pending)
+        self.assertIn(
+            f"1 naming-alias record(s) not yet appended to {alias_store}",
+            status.pending,
+        )
+
+    def test_recovered_workspace_reports_synced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, workdir = self.abandoned_session(tmp)
+            with redirect_stdout(io.StringIO()):
+                chat.recover_session(str(workdir))
+            status = chat.inspect_workspace(workdir)
+        self.assertTrue(status.synced)
+        self.assertEqual(status.pending, [])
+
+    def test_untouched_session_is_synced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, workdir = self.abandoned_session(tmp, edit=False)
+            status = chat.inspect_workspace(workdir)
+        self.assertTrue(status.synced)
+
+    def test_sample_session_holds_the_only_copy(self):
+        """No destination file means the workspace is the only copy — keep it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp, "partsmatcher-chat-sample")
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                chat.run_chat(
+                    inventory=parse_inventory(json.loads(self.ORIGINAL)),
+                    inventory_text=self.ORIGINAL,
+                    sync=False,
+                    workdir=str(workdir),
+                    which=lambda binary: f"/usr/local/bin/{binary}",
+                    launch=editing_launch(
+                        new_inventory=self.UPDATED, alias_lines=[self.NEW_ALIAS]
+                    ),
+                )
+            status = chat.inspect_workspace(workdir)
+        self.assertFalse(status.synced)
+        self.assertEqual(len(status.pending), 2)
+        for item in status.pending:
+            self.assertIn("only copy", item)
+
+    def test_corrupt_session_record_is_unreadable_not_disposable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, workdir = self.abandoned_session(tmp, edit=False)
+            (workdir / chat.SESSION_FILENAME).write_text("{not json", encoding="utf-8")
+            status = chat.inspect_workspace(workdir)
+        self.assertFalse(status.synced)
+        self.assertIsNotNone(status.error)
+        self.assertIn("could not parse", status.error)
+
+    def test_list_reports_each_workspace_and_the_clean_hint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.abandoned_session(tmp, name="partsmatcher-chat-clean", edit=False)
+            self.abandoned_session(tmp, name="partsmatcher-chat-dirty")
+            code, out, _ = self.capture(chat.list_workspaces, Path(tmp))
+        self.assertEqual(code, 0)
+        self.assertIn("2 recoverable chat workspace(s)", out)
+        self.assertIn("partsmatcher-chat-clean", out)
+        self.assertIn("partsmatcher-chat-dirty", out)
+        self.assertIn("— synced", out)
+        self.assertIn("— unsynced", out)
+        self.assertIn("would remove 1 of 2", out)
+
+    def test_list_writes_nothing_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, alias_store, workdir = self.abandoned_session(tmp)
+            self.capture(chat.list_workspaces, Path(tmp))
+            self.assertEqual(source.read_text(encoding="utf-8"), self.ORIGINAL)
+            self.assertEqual(alias_store.read_text(encoding="utf-8"), self.SEED)
+            self.assertTrue(workdir.exists())
+
+    def test_list_with_nothing_to_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, _ = self.capture(chat.list_workspaces, Path(tmp))
+        self.assertEqual(code, 0)
+        self.assertIn("no recoverable chat workspaces", out)
+
+    def test_clean_removes_synced_and_keeps_the_rest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, clean_ws = self.abandoned_session(
+                tmp, name="partsmatcher-chat-clean", edit=False
+            )
+            _, _, dirty_ws = self.abandoned_session(
+                tmp, name="partsmatcher-chat-dirty"
+            )
+            code, out, _ = self.capture(chat.clean_workspaces, Path(tmp))
+            self.assertEqual(code, 0)
+            self.assertFalse(clean_ws.exists())
+            self.assertTrue(dirty_ws.exists())
+        self.assertIn("removed 1 workspace(s)", out)
+        self.assertIn("kept 1 workspace(s)", out)
+        self.assertIn("--force", out)
+
+    def test_clean_force_removes_unsynced_too(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, dirty_ws = self.abandoned_session(tmp)
+            code, out, _ = self.capture(
+                chat.clean_workspaces, Path(tmp), force=True
+            )
+            self.assertEqual(code, 0)
+            self.assertFalse(dirty_ws.exists())
+        self.assertIn("removed 1 workspace(s)", out)
+        self.assertIn("1 with unsynced changes", out)
+
+    def test_clean_with_only_unsynced_removes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, dirty_ws = self.abandoned_session(tmp)
+            code, out, _ = self.capture(chat.clean_workspaces, Path(tmp))
+            self.assertEqual(code, 0)
+            self.assertTrue(dirty_ws.exists())
+        self.assertIn("nothing removed", out)
+
+    def test_clean_with_nothing_to_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, _ = self.capture(chat.clean_workspaces, Path(tmp))
+        self.assertEqual(code, 0)
+        self.assertIn("no recoverable chat workspaces", out)
+
+    def test_clean_reports_a_failed_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, workdir = self.abandoned_session(tmp, edit=False)
+            with mock.patch.object(
+                chat.shutil, "rmtree", side_effect=OSError("permission denied")
+            ):
+                code, _, err = self.capture(chat.clean_workspaces, Path(tmp))
+            self.assertEqual(code, 1)
+            self.assertTrue(workdir.exists())
+        self.assertIn("could not remove", err)
+        self.assertIn("permission denied", err)
+
+    def test_age_formatting(self):
+        now = 1_000_000.0
+        cases = [
+            (now - 5, "just now"),
+            (now - 600, "10m ago"),
+            (now - 7200, "2h ago"),
+            (now - 86400 * 3, "3d ago"),
+        ]
+        for modified, expected in cases:
+            with self.subTest(expected=expected):
+                self.assertEqual(chat._format_age(modified, now=now), expected)
+
+
 class CliRoutingTests(unittest.TestCase):
     def invoke(self, argv):
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -936,6 +1102,49 @@ class CliRoutingTests(unittest.TestCase):
     def test_recover_rejects_claude_passthrough(self):
         with self.assertRaises(SystemExit) as ctx:
             self.invoke(["recover", "--", "--continue"])
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_recover_list_routes_to_list_workspaces(self):
+        with mock.patch.object(chat, "list_workspaces", return_value=0) as listing:
+            with mock.patch.object(chat, "recover_session") as rec:
+                code, _, _ = self.invoke(["recover", "--list"])
+        self.assertEqual(code, 0)
+        listing.assert_called_once_with()
+        rec.assert_not_called()
+
+    def test_recover_clean_routes_to_clean_workspaces(self):
+        with mock.patch.object(chat, "clean_workspaces", return_value=0) as clean:
+            code, _, _ = self.invoke(["recover", "--clean"])
+        self.assertEqual(code, 0)
+        clean.assert_called_once_with(force=False)
+
+    def test_recover_clean_force_passes_force_through(self):
+        with mock.patch.object(chat, "clean_workspaces", return_value=0) as clean:
+            self.invoke(["recover", "--clean", "--force"])
+        clean.assert_called_once_with(force=True)
+
+    def test_recover_clean_propagates_a_failed_removal(self):
+        with mock.patch.object(chat, "clean_workspaces", return_value=1):
+            code, _, _ = self.invoke(["recover", "--clean"])
+        self.assertEqual(code, 1)
+
+    def test_survey_flags_reject_a_workspace_path(self):
+        for flag in ("--list", "--clean"):
+            with self.subTest(flag=flag):
+                code, _, err = self.invoke(["recover", "/tmp/ws", flag])
+                self.assertEqual(code, 2)
+                self.assertIn("drop the workspace path", err)
+
+    def test_force_without_clean_is_an_error(self):
+        with mock.patch.object(chat, "recover_session") as rec:
+            code, _, err = self.invoke(["recover", "--force"])
+        self.assertEqual(code, 2)
+        self.assertIn("--force only applies to --clean", err)
+        rec.assert_not_called()
+
+    def test_list_and_clean_are_mutually_exclusive(self):
+        with self.assertRaises(SystemExit) as ctx:
+            self.invoke(["recover", "--list", "--clean"])
         self.assertEqual(ctx.exception.code, 2)
 
 

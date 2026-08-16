@@ -57,11 +57,22 @@ vision scanner will eventually consume.
   sidebar renderer was hardened (empty groups no longer emit an empty
   `<ul>`, empty suffix spans skipped, stale `msg meta` class reset) —
   code audit found no path that emits an empty bullet, so Ben should
-  still eyeball "ALMOST THERE (0)" on the next real run. Still open:
-  Ben's per-turn latency verdict — the doc's 1C option (one long-lived
-  stream-json process) is the planned upgrade path if spawning grates —
-  and the temp-dir workspace accumulation (`recover --list`/cleanup
-  nicety).
+  still eyeball "ALMOST THERE (0)" on the next real run.
+- **Workspace accumulation closed (v0.7.1, 2026-08-16):** `recover
+  --list` shows every leftover workspace, its age, and what each still
+  owes ("inventory edits not yet written to …", "1 naming-alias
+  record(s) not yet appended to …"), and `recover --clean` deletes the
+  disposable ones. Disposable is decided by the same already-in-sync
+  tests `recover` itself runs, factored out into `inspect_workspace` so
+  the two can't drift — a workspace reported synced is one `recover`
+  would find nothing to do for. Anything still holding changes is kept
+  and reported, including sample sessions where the workspace is the
+  only copy and corrupt session records; `--force` overrides. Verified
+  end to end: list → clean (removes 1 of 2) → recover the kept one →
+  clean again removes it.
+- **Still open:** Ben's per-turn latency verdict — the doc's 1C option
+  (one long-lived stream-json process) is the planned upgrade path if
+  spawning grates. That's the last open item on app v1.
 - **Standalone batch scanner** — unchanged in scope (photos in,
   inventory JSON out, no conversation; the inventory schema is its
   contract and `*.aliases.jsonl` supplies the naming vocabulary, 67
@@ -78,13 +89,13 @@ vision scanner will eventually consume.
   specificity-preserving renames (reconcile currently trades detail for
   match-ability: "Breadboard (830 tie-points)" → "Breadboard").
 
-## State notes (2026-08-08)
+## State notes (2026-08-16)
 
-- `main` = v0.7.0 (matcher → chat mode → conversational intake → photo
+- `main` = v0.7.1 (matcher → chat mode → conversational intake → photo
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
   command → CI → project-database intake → kickoff greeting polish →
-  local app).
-- 130 stdlib `unittest` tests; the chat and app tests inject fakes, so the suite
+  local app → workspace list/clean).
+- 151 stdlib `unittest` tests; the chat and app tests inject fakes, so the suite
   never needs Claude installed. CI: GitHub Actions runs the suite plus a
   sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
 - User-side data lives on Ben's machine, not in this repo:

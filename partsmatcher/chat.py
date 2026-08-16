@@ -20,6 +20,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
@@ -610,7 +612,7 @@ def _write_session_record(
 def find_recoverable_workspaces(tmp_root: "Optional[Path]" = None) -> "list[Path]":
     """Chat workspaces in the temp directory carrying a session record,
     newest first."""
-    root = Path(tmp_root) if tmp_root is not None else Path(tempfile.gettempdir())
+    root = _resolve_tmp_root(tmp_root)
     stamped = []
     for candidate in root.glob(WORKSPACE_PREFIX + "*"):
         try:
@@ -644,6 +646,241 @@ def _record_path(record: dict, key: str) -> "Optional[Path]":
     return Path(value) if isinstance(value, str) and value else None
 
 
+@dataclass
+class WorkspaceStatus:
+    """What a leftover chat workspace still holds, and whether it can go.
+
+    Workspaces pile up in the temp directory — one per session, each with a
+    full copy of the inventory. `pending` lists work that exists only inside
+    this workspace; when it is empty the directory is disposable.
+    """
+
+    path: Path
+    modified: float
+    pending: "list[str]" = field(default_factory=list)
+    error: "Optional[str]" = None
+
+    @property
+    def synced(self) -> bool:
+        """True when deleting the workspace would lose nothing."""
+        return self.error is None and not self.pending
+
+
+def _pending_file_change(
+    workspace_file: Path,
+    *,
+    original_text: "Optional[str]",
+    store: "Optional[Path]",
+    label: str,
+) -> "Optional[str]":
+    """Describe an edit the workspace still owes, or None if nothing is owed."""
+    if original_text is None:
+        return None  # the session never loaded one
+    try:
+        updated = workspace_file.read_text(encoding="utf-8")
+    except OSError:
+        return None  # nothing left in the workspace to lose
+    if updated == original_text:
+        return None
+    if store is None:
+        return (
+            f"{label} edits with no destination file (sample session) — this "
+            "workspace holds the only copy"
+        )
+    try:
+        if store.read_text(encoding="utf-8") == updated:
+            return None
+    except OSError:
+        pass
+    return f"{label} edits not yet written to {store}"
+
+
+def _pending_aliases(
+    workspace: Path, *, alias_seed_count: int, alias_store: "Optional[Path]"
+) -> "Optional[str]":
+    """Describe alias records the workspace still owes the dataset."""
+    valid, _ = _new_alias_records(workspace, alias_seed_count)
+    if not valid:
+        return None
+    if alias_store is None:
+        return (
+            f"{len(valid)} naming-alias record(s) with no destination file "
+            "(sample session) — this workspace holds the only copy"
+        )
+    try:
+        existing = [
+            line
+            for line in alias_store.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except OSError:
+        existing = None
+    if existing is not None and existing[-len(valid) :] == valid:
+        return None
+    return f"{len(valid)} naming-alias record(s) not yet appended to {alias_store}"
+
+
+def inspect_workspace(workspace: Path) -> WorkspaceStatus:
+    """Report what a chat workspace still owes, without writing anything.
+
+    Uses the same already-in-sync tests `recover_session` runs, so a
+    workspace reported synced is one `recover` would find nothing to do for.
+    """
+    try:
+        modified = (workspace / SESSION_FILENAME).stat().st_mtime
+    except OSError:
+        modified = 0.0
+    try:
+        record = _load_session_record(workspace)
+    except PartsMatcherError as exc:
+        return WorkspaceStatus(path=workspace, modified=modified, error=str(exc))
+
+    original_inventory = record.get("original_inventory")
+    if not isinstance(original_inventory, str):
+        original_inventory = ""
+    original_projects = record.get("original_projects")
+    if not isinstance(original_projects, str):
+        original_projects = None
+    seed_count = record.get("alias_seed_count")
+    if not isinstance(seed_count, int) or seed_count < 0:
+        seed_count = 0
+
+    owed = (
+        _pending_file_change(
+            workspace / "inventory.json",
+            original_text=original_inventory,
+            store=_record_path(record, "inventory_store"),
+            label="inventory",
+        ),
+        _pending_file_change(
+            workspace / "projects.json",
+            original_text=original_projects,
+            store=_record_path(record, "projects_store"),
+            label="project database",
+        ),
+        _pending_aliases(
+            workspace,
+            alias_seed_count=seed_count,
+            alias_store=_record_path(record, "alias_store"),
+        ),
+    )
+    return WorkspaceStatus(
+        path=workspace,
+        modified=modified,
+        pending=[item for item in owed if item is not None],
+    )
+
+
+def inspect_workspaces(tmp_root: "Optional[Path]" = None) -> "list[WorkspaceStatus]":
+    """Status for every recoverable workspace in the temp directory, newest first."""
+    return [inspect_workspace(path) for path in find_recoverable_workspaces(tmp_root)]
+
+
+def _format_age(modified: float, *, now: "Optional[float]" = None) -> str:
+    """Coarse human age — enough to spot which leftovers are stale."""
+    seconds = max(0.0, (time.time() if now is None else now) - modified)
+    if seconds < 90:
+        return "just now"
+    minutes = seconds / 60
+    if minutes < 90:
+        return f"{int(round(minutes))}m ago"
+    hours = minutes / 60
+    if hours < 36:
+        return f"{int(round(hours))}h ago"
+    return f"{int(round(hours / 24))}d ago"
+
+
+def _status_label(status: WorkspaceStatus) -> str:
+    if status.error is not None:
+        return "unreadable"
+    return "synced" if status.synced else "unsynced"
+
+
+def _print_status_detail(status: WorkspaceStatus, indent: str = "      ") -> None:
+    if status.error is not None:
+        print(f"{indent}{status.error}")
+    for item in status.pending:
+        print(f"{indent}{item}")
+
+
+def _resolve_tmp_root(tmp_root: "Optional[Path]") -> Path:
+    return Path(tmp_root) if tmp_root is not None else Path(tempfile.gettempdir())
+
+
+def list_workspaces(tmp_root: "Optional[Path]" = None) -> int:
+    """Print every recoverable chat workspace and what each still owes."""
+    root = _resolve_tmp_root(tmp_root)
+    statuses = inspect_workspaces(root)
+    if not statuses:
+        print(f"no recoverable chat workspaces under {root}")
+        return 0
+    print(f"{len(statuses)} recoverable chat workspace(s) under {root}:")
+    for status in statuses:
+        print(
+            f"  {status.path}  ({_format_age(status.modified)}) — "
+            f"{_status_label(status)}"
+        )
+        _print_status_detail(status)
+    disposable = [status for status in statuses if status.synced]
+    if disposable:
+        print(
+            f"\n`partsmatcher recover --clean` would remove {len(disposable)} "
+            f"of {len(statuses)} (nothing left to sync)."
+        )
+    else:
+        print("\nrun `partsmatcher recover PATH` to sync one back.")
+    return 0
+
+
+def clean_workspaces(tmp_root: "Optional[Path]" = None, *, force: bool = False) -> int:
+    """Delete leftover chat workspaces that hold nothing worth keeping.
+
+    Workspaces with unsynced changes are kept and reported unless `force` is
+    set. Returns 1 if any deletion failed, 0 otherwise.
+    """
+    root = _resolve_tmp_root(tmp_root)
+    statuses = inspect_workspaces(root)
+    if not statuses:
+        print(f"no recoverable chat workspaces under {root}")
+        return 0
+
+    removed, kept, failed = [], [], []
+    for status in statuses:
+        if not force and not status.synced:
+            kept.append(status)
+            continue
+        try:
+            shutil.rmtree(status.path)
+        except OSError as exc:
+            failed.append((status, exc))
+            continue
+        removed.append(status)
+
+    if removed:
+        unsynced = [status for status in removed if not status.synced]
+        note = f" ({len(unsynced)} with unsynced changes — --force)" if unsynced else ""
+        print(f"removed {len(removed)} workspace(s){note}:")
+        for status in removed:
+            print(f"  {status.path}  ({_format_age(status.modified)})")
+    if kept:
+        print(
+            f"kept {len(kept)} workspace(s) still holding changes — run "
+            "`partsmatcher recover PATH` on each first, or pass --force to "
+            "delete them anyway:"
+        )
+        for status in kept:
+            print(f"  {status.path}  ({_format_age(status.modified)})")
+            _print_status_detail(status)
+    for status, exc in failed:
+        print(
+            f"warning: could not remove {status.path} ({exc})",
+            file=sys.stderr,
+        )
+    if not removed and not failed:
+        print("nothing removed.")
+    return 1 if failed else 0
+
+
 def recover_session(
     workspace: "Optional[str]" = None, tmp_root: "Optional[Path]" = None
 ) -> int:
@@ -658,7 +895,7 @@ def recover_session(
     if workspace is not None:
         target = Path(workspace).expanduser()
     else:
-        root = Path(tmp_root) if tmp_root is not None else Path(tempfile.gettempdir())
+        root = _resolve_tmp_root(tmp_root)
         candidates = find_recoverable_workspaces(root)
         if not candidates:
             raise PartsMatcherError(

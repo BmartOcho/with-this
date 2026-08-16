@@ -163,6 +163,27 @@ re-runs the same validate-and-sync against the newest recoverable workspace
 (pass a workspace path to pick a specific one). It's safe to re-run:
 files already in sync are detected and left alone.
 
+Workspaces accumulate in the temp directory — one per session, each holding a
+full copy of the inventory. To see what's piled up and what each one still
+owes your files:
+
+```console
+$ python -m partsmatcher recover --list
+2 recoverable chat workspace(s) under /tmp:
+  /tmp/partsmatcher-chat-9k2f1a  (just now) — unsynced
+      inventory edits not yet written to /Users/you/my_inventory.json
+      1 naming-alias record(s) not yet appended to /Users/you/my_inventory.aliases.jsonl
+  /tmp/partsmatcher-chat-3d81cc  (4d ago) — synced
+
+`partsmatcher recover --clean` would remove 1 of 2 (nothing left to sync).
+```
+
+`recover --clean` deletes the disposable ones. A workspace whose changes
+haven't reached your files is kept and reported — including sessions on the
+bundled sample, where the workspace holds the only copy — so cleaning can't
+throw away work you haven't recovered yet. `--force` overrides that and
+deletes everything.
+
 ### Photo intake — vision v1
 
 Photos are another intake source, flowing through the same confirmation
@@ -360,6 +381,12 @@ python -m partsmatcher recover [WORKSPACE_DIR]
   re-run the end-of-session sync for a chat session that ended without a
   clean exit — closed terminal, crash — validating and backing up exactly
   like the normal exit path (default: the newest recoverable workspace)
+
+  --list           show every leftover workspace, its age, and what it
+                   still owes your files; writes nothing
+  --clean          delete leftover workspaces that are already synced back;
+                   ones still holding changes are kept and reported
+  --force          with --clean, delete those too
 
   --version        show version
 ```
