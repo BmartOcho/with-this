@@ -20,3 +20,4 @@ venv/
 # unlazy skill (project-local install)
 .unlazy-hook-state.json
 .claude/skills/unlazy
+.claude/settings.local.json
