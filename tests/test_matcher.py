@@ -46,6 +46,67 @@ class InventoryParsingTests(unittest.TestCase):
         self.assertEqual(inventory.have("Red LED"), 5)
         self.assertEqual(inventory.distinct_parts, 1)
 
+    def test_zero_quantity_entry_is_not_a_part_on_hand(self):
+        # quantity 0 is accepted by the schema (a part recorded but used up);
+        # it must not inflate the part-type count the CLI and sidebar report.
+        inventory = parse_inventory(
+            [
+                {"name": "Servo", "quantity": 0},
+                {"name": "Red LED", "quantity": 5},
+            ]
+        )
+        self.assertEqual(inventory.distinct_parts, 1)
+        self.assertEqual(inventory.total_units, 5)
+        self.assertEqual(
+            [display for _key, display, _qty in inventory.on_hand()], ["Red LED"]
+        )
+
+    def test_zero_quantity_entry_is_still_retained(self):
+        # Retained, not dropped: have() answers 0 and the spelling survives for
+        # alias work, which is why on_hand() rather than the dict is the filter.
+        inventory = parse_inventory([{"name": "Servo  Motor", "quantity": 0}])
+        self.assertEqual(inventory.have("servo motor"), 0)
+        self.assertIn("servo motor", inventory.quantities)
+        self.assertEqual(inventory.display_names["servo motor"], "Servo Motor")
+        self.assertEqual(inventory.on_hand(), [])
+
+    def test_zero_quantity_merges_without_hiding_a_real_part(self):
+        # A 0 entry summed with a real one still leaves a part on hand.
+        inventory = parse_inventory(
+            [
+                {"name": "Nut", "quantity": 0},
+                {"name": "nut", "quantity": 3},
+            ]
+        )
+        self.assertEqual(inventory.have("Nut"), 3)
+        self.assertEqual(inventory.distinct_parts, 1)
+        self.assertEqual(inventory.on_hand(), [("nut", "Nut", 3)])
+
+    def test_zero_quantity_part_is_reported_missing_by_the_matcher(self):
+        # Matching is unchanged: a used-up part reads as have=0, not absent.
+        inventory = parse_inventory([{"name": "Servo", "quantity": 0}])
+        projects = parse_projects(
+            [{"name": "Spinner", "parts": [{"name": "Servo", "quantity": 1}]}]
+        )
+        report = match(inventory, projects)
+        self.assertEqual(report.build_now, [])
+        self.assertEqual(len(report.almost), 1)
+        missing = report.almost[0].missing[0]
+        self.assertEqual((missing.required, missing.have, missing.missing), (1, 0, 1))
+
+    def test_on_hand_preserves_file_order(self):
+        inventory = parse_inventory(
+            [
+                {"name": "Zener diode", "quantity": 2},
+                {"name": "Ammeter", "quantity": 0},
+                {"name": "Buzzer", "quantity": 1},
+            ]
+        )
+        self.assertEqual(
+            [display for _key, display, _qty in inventory.on_hand()],
+            ["Zener diode", "Buzzer"],
+        )
+
     def test_quantity_defaults_to_one(self):
         inventory = parse_inventory([{"name": "Red LED"}, {"name": "Red LED"}])
         self.assertEqual(inventory.have("red led"), 2)
