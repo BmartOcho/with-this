@@ -85,8 +85,8 @@ class AppState:
                 "part_types": inventory.distinct_parts,
                 "total_parts": inventory.total_units,
                 "parts": [
-                    {"name": display, "quantity": inventory.quantities[key]}
-                    for key, display in inventory.display_names.items()
+                    {"name": display, "quantity": quantity}
+                    for _key, display, quantity in inventory.on_hand()
                 ],
             }
         except (OSError, json.JSONDecodeError, PartsMatcherError) as exc:

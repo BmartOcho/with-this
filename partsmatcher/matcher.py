@@ -75,6 +75,15 @@ class Inventory:
 
     Repeated names are merged by summing quantities, so a producer may emit
     one entry per detection (quantity 1 each) and still get correct totals.
+
+    An entry may legitimately carry quantity 0 — a part the file still lists
+    but that has been used up (``parse_inventory`` accepts it deliberately).
+    Such an entry is *retained*: its key stays in ``quantities`` and its
+    spelling in ``display_names``, so ``have`` answers 0 and alias work keeps
+    the vocabulary. It is not, however, a part on hand, so it is excluded from
+    ``on_hand``, ``distinct_parts`` and ``total_units`` alike. Render parts
+    through ``on_hand`` rather than iterating ``display_names``, so counts and
+    listings cannot disagree.
     """
 
     quantities: "dict[str, int]"
@@ -83,9 +92,25 @@ class Inventory:
     def have(self, name: str) -> int:
         return self.quantities.get(normalize_name(name), 0)
 
+    def on_hand(self) -> "list[tuple[str, str, int]]":
+        """(key, display spelling, quantity) for every part actually on hand.
+
+        File order is preserved, and quantity-0 entries are skipped. Every
+        caller that *lists* parts goes through this, so no listing can
+        disagree with ``distinct_parts``.
+        """
+        return [
+            (key, self.display_names[key], quantity)
+            for key, quantity in self.quantities.items()
+            if quantity > 0
+        ]
+
     @property
     def distinct_parts(self) -> int:
-        return len(self.quantities)
+        # Counted straight off ``quantities`` rather than via ``on_hand`` so a
+        # producer that builds an Inventory directly still gets a count even
+        # with sparse ``display_names``.
+        return sum(1 for quantity in self.quantities.values() if quantity > 0)
 
     @property
     def total_units(self) -> int:

@@ -145,8 +145,8 @@ def build_context_markdown(
         "`inventory.json` (same schema the deterministic matcher reads).",
         "",
     ]
-    for key, display in inventory.display_names.items():
-        lines.append(f"- {display} ×{inventory.quantities[key]}")
+    for _key, display, quantity in inventory.on_hand():
+        lines.append(f"- {display} ×{quantity}")
     lines.append("")
     lines.append(
         f"({inventory.distinct_parts} part types, {inventory.total_units} parts total)"
