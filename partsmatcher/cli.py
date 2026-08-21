@@ -332,10 +332,9 @@ def _n(count: int, word: str) -> str:
 
 
 def _report_to_dict(report: MatchReport, inventory: Inventory) -> dict:
-    total = len(report.build_now) + len(report.almost) + len(report.not_yet)
     return {
         "summary": {
-            "projects": total,
+            "projects": report.total_projects,
             "build_now": len(report.build_now),
             "almost": len(report.almost),
             "not_yet": len(report.not_yet),
@@ -362,9 +361,8 @@ def _print_human(
 ) -> None:
     paint = _make_painter(color)
     ok_mark, near_mark, far_mark = _pick_marks(sys.stdout)
-    total = len(report.build_now) + len(report.almost) + len(report.not_yet)
     print(
-        f"Matched {_n(total, 'project')} against "
+        f"Matched {_n(report.total_projects, 'project')} against "
         f"{_n(inventory.distinct_parts, 'part type')} "
         f"({_n(inventory.total_units, 'part')} on hand)."
     )

@@ -268,6 +268,25 @@ class MatchingTests(unittest.TestCase):
         report = match(inventory, projects)
         self.assertEqual(len(report.build_now), 2)
 
+    def test_total_projects_counts_every_bucket(self):
+        # One of each: buildable, almost (short 1), and not yet (short 9).
+        inventory = make_inventory(("LED", 5))
+        projects = parse_projects(
+            [
+                project_dict("Buildable", ("LED", 1)),
+                project_dict("Almost", ("Servo", 1)),
+                project_dict("NotYet", ("Servo", 9)),
+            ]
+        )
+        report = match(inventory, projects)
+        self.assertEqual((len(report.build_now), len(report.almost)), (1, 1))
+        self.assertEqual(len(report.not_yet), 1)
+        self.assertEqual(report.total_projects, 3)
+
+    def test_total_projects_is_zero_without_projects(self):
+        report = match(make_inventory(("LED", 5)), [])
+        self.assertEqual(report.total_projects, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
