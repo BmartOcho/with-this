@@ -259,6 +259,15 @@ class MatchReport:
     not_yet: "list[ProjectMatch]"
     almost_threshold: int
 
+    @property
+    def total_projects(self) -> int:
+        """Projects considered, across all three buckets.
+
+        Every project lands in exactly one bucket, so this is the count that
+        went in — the number to report alongside the per-bucket counts.
+        """
+        return len(self.build_now) + len(self.almost) + len(self.not_yet)
+
 
 def _gap_order(result: ProjectMatch) -> "tuple[int, int, str]":
     # Fewest missing units first; ties go to fewer distinct parts to buy.
