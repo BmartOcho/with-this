@@ -3,9 +3,14 @@
 Vanilla HTML/CSS/JS, no external resources: the page talks to the local
 server with `fetch` and reads the turn stream incrementally (the message
 endpoint responds as a text/event-stream the page parses by hand).
+
+The page is rendered per session by `render_page`, which substitutes the
+session token the server requires on every POST.
 """
 
-PAGE_HTML = """\
+TOKEN_PLACEHOLDER = "__PM_TOKEN__"
+
+PAGE_TEMPLATE = """\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -92,6 +97,9 @@ PAGE_HTML = """\
   <div id="report"></div>
 </aside>
 <script>
+// Session token, substituted server-side. Sent on every POST so a page
+// on another origin can't drive this session.
+const PM_TOKEN = '__PM_TOKEN__';
 const log = document.getElementById('log');
 const form = document.getElementById('form');
 const input = document.getElementById('input');
@@ -177,7 +185,7 @@ async function sendTurn(message, displayAs) {
   try {
     const res = await fetch('/api/message', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-PartsMatcher-Token': PM_TOKEN},
       body: JSON.stringify({text: message}),
     });
     if (!res.ok) { bubble('meta', 'error: ' + await res.text()); return; }
@@ -229,7 +237,9 @@ endBtn.addEventListener('click', async () => {
   if (busy || ended) return;
   ended = true; setBusy(false);
   endBtn.disabled = true; input.disabled = true;
-  const res = await fetch('/api/end', {method: 'POST'});
+  const res = await fetch('/api/end', {
+    method: 'POST', headers: {'X-PartsMatcher-Token': PM_TOKEN},
+  });
   const result = await res.json();
   bubble('meta', 'Session synced:\\n' +
     (result.messages.length ? result.messages.join('\\n') : 'no changes to sync') +
@@ -249,3 +259,8 @@ endBtn.addEventListener('click', async () => {
 </body>
 </html>
 """
+
+
+def render_page(token: str) -> str:
+    """The page with this session's token substituted in."""
+    return PAGE_TEMPLATE.replace(TOKEN_PLACEHOLDER, token)

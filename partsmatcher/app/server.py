@@ -14,11 +14,19 @@ instead of tracking state in memory.
 
 from __future__ import annotations
 
+import hmac
 import json
+import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Optional
+
+# Every state-changing request must carry this header, echoing the token
+# the page was served with. A page on another origin can't set a custom
+# header without a CORS preflight, which this server never answers — so
+# the header alone stops a random website from driving the session.
+TOKEN_HEADER = "X-PartsMatcher-Token"
 
 from ..matcher import PartsMatcherError, match, parse_inventory, parse_projects
 
@@ -52,6 +60,9 @@ class AppState:
         self.workspace = Path(workspace)
         self.runner = runner
         self.almost_threshold = almost_threshold
+        # Per-session secret, embedded in the page and required on every
+        # POST. Regenerated per run, never written to disk.
+        self.token = secrets.token_urlsafe(32)
         self.kickoff = kickoff
         self.kickoff_sent = False
         self._sync_callback = sync_callback
@@ -153,11 +164,23 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _authorized(self) -> bool:
+        """True when the request carries this session's token and a sane Origin."""
+        origin = self.headers.get("Origin")
+        if origin is not None:
+            host = self.headers.get("Host") or ""
+            if origin not in (f"http://{host}", f"https://{host}"):
+                return False
+        sent = self.headers.get(TOKEN_HEADER) or ""
+        return hmac.compare_digest(sent, self.state.token)
+
     def do_GET(self) -> None:
         if self.path in ("/", "/index.html"):
-            from .page import PAGE_HTML
+            from .page import render_page
 
-            self._send_text(PAGE_HTML, 200, "text/html; charset=utf-8")
+            self._send_text(
+                render_page(self.state.token), 200, "text/html; charset=utf-8"
+            )
         elif self.path == "/api/state":
             self._send_json(self.state.state_payload())
         else:
@@ -168,14 +191,20 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         return self.rfile.read(length) if length else b""
 
     def do_POST(self) -> None:
+        if self.path not in ("/api/message", "/api/end"):
+            self._send_text("not found", 404, "text/plain; charset=utf-8")
+            return
+        if not self._authorized():
+            # Drain the body so the connection stays usable, then refuse.
+            self._read_body()
+            self._send_text("forbidden", 403, "text/plain; charset=utf-8")
+            return
         if self.path == "/api/message":
             self._post_message()
-        elif self.path == "/api/end":
+        else:
             messages = self.state.sync()
             self._send_json({"messages": messages})
             self.state.shutdown_server()
-        else:
-            self._send_text("not found", 404, "text/plain; charset=utf-8")
 
     def _post_message(self) -> None:
         if self.state.synced:
