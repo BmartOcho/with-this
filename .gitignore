@@ -21,3 +21,21 @@ venv/
 .unlazy-hook-state.json
 .claude/skills/unlazy
 .claude/settings.local.json
+
+# Personal data — never belongs in this repo. The bundled samples in
+# partsmatcher/samples/ are the only inventory/project data we ship.
+my_*.json
+*.aliases.jsonl
+*.bak
+photos/
+data/
+
+# Scratch output from the GATES.md byte-identical checks (G9/G10), which
+# write into the repo root — a stray `git add .` would otherwise publish
+# a dump of whatever inventory was loaded at the time.
+before.txt
+after.txt
+human_before.txt
+human_after.txt
+json_before.txt
+json_after.txt

@@ -110,6 +110,17 @@ headless mode has no prompt to recover from — the same silent failure G11
 was written to rule out for writes. Do it only with another live run to
 confirm reads still land.
 
+Why that is an acceptable position rather than an open hole: the app is a
+single-user tool bound to `127.0.0.1`, launched by the person whose files
+those are, and it runs *their* Claude Code under *their* login — a session
+that could already read those files if they simply asked it to. The
+allowlist is a blast-radius limit on a turn that goes wrong, not a sandbox
+against a hostile operator, and it is not a substitute for one. What the
+write scope buys is that a prompt-injected turn cannot silently modify
+anything outside the session workspace. Reads are the weaker half of that
+guarantee and are named here so nobody mistakes the current state for
+complete.
+
 Note for anyone reproducing G11: the session workspace is not under `/tmp`
 on macOS — Python's `mkdtemp()` returns `/var/folders/.../T/` there, so a
 `/tmp/partsmatcher-chat-*` glob finds nothing. Use the
