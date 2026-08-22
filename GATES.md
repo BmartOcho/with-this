@@ -21,6 +21,7 @@ Depth Tree (3):
   L2.1  Writes scoped        -> G1, G2, G3
   L2.2  POSTs authenticated  -> G4, G5, G6, G7
   L2.3  Nothing else moved   -> G8, G9, G10
+  L2.4  Proven on real Claude -> G11
 
 - [x] G1: No bare `Edit`/`Write`/`MultiEdit` entry survives in the generated allowlist.
   CHECK: python3 -c "import json,tempfile;from pathlib import Path;from partsmatcher import app as a;t=tempfile.mkdtemp();allow=json.loads(a.write_permission_settings(Path(t)).read_text())['permissions']['allow'];print('bare_write_rules=%d' % sum(1 for e in allow if e in ('Edit','Write','MultiEdit')))"
@@ -80,18 +81,36 @@ Depth Tree (3):
   EXPECT: json_identical=yes
   EVIDENCE: json_identical=yes
 
-## Not gated here — needs a live run
+- [x] G11: **Live run** — the scoped rule actually works against a real `claude`.
+  G1–G3 verify the rule's *shape*; the suite injects fakes and never
+  launches Claude Code, so only a real session proves the rule is accepted
+  and that writes still land unprompted. A denied write in headless mode
+  can't prompt, so this failure would have been silent.
+  CHECK: `python3 -m partsmatcher app` on the bundled samples; ask it to
+  add parts; confirm the Edit lands, the matcher re-runs, and End-session
+  syncs.
+  EXPECT: Edit and Bash fire with no prompt and no denial; sidebar counts
+  move; End-session returns the sync summary.
+  EVIDENCE: Ben, macOS, 2026-08-22, `python3 -m partsmatcher app` on the
+  bundled samples. The turn showed `Read Read Edit Bash` — the Edit landed
+  and the matcher command ran, neither prompted nor denied. Inventory went
+  15 → 16 part types, 93 → 98 parts (Red LED 6 → 9, Green LED ×2 new), and
+  LED Dice moved into BUILD NOW. **End session & sync** returned
+  "inventory changed during the session (15 → 16 part types, 93 → 98
+  parts)... 2 naming-alias record(s) captured", then the app shut down —
+  so requiring the token on `POST /api/end` does not break the button, and
+  the bundled sample was correctly left untouched.
 
-The scoped `Edit(//<ws>/**)` rule is verified by shape, not by behavior:
-the test suite injects fakes and never launches a real `claude`, so
-nothing here proves Claude Code accepts the rule and still edits
-`inventory.json` unprompted. **Run one real `partsmatcher app` session
-before trusting this.** If writes start prompting (and therefore failing
-silently in headless mode), the anchor is wrong — check `//` absolute-path
-semantics against the current permissions docs.
+## Not gated here — deliberate follow-up
 
 Read-only tools (`Read`, `Glob`, `Grep`) remain unscoped, unchanged from
 before. `Grep` in particular can disclose file contents from outside the
-workspace. Scoping them is deliberate follow-up work, gated on the same
-live run, because a denied read in headless mode has no prompt to recover
-from.
+workspace. Scoping them stays follow-up work, because a denied read in
+headless mode has no prompt to recover from — the same silent failure G11
+was written to rule out for writes. Do it only with another live run to
+confirm reads still land.
+
+Note for anyone reproducing G11: the session workspace is not under `/tmp`
+on macOS — Python's `mkdtemp()` returns `/var/folders/.../T/` there, so a
+`/tmp/partsmatcher-chat-*` glob finds nothing. Use the
+`Session workspace:` path the app prints at startup.
