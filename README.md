@@ -178,6 +178,11 @@ $ python -m partsmatcher recover --list
 `partsmatcher recover --clean` would remove 1 of 2 (nothing left to sync).
 ```
 
+(The temp directory is wherever Python puts it: `/tmp` on most Linux,
+but `/var/folders/.../T/` on macOS — so a `/tmp/partsmatcher-chat-*` glob
+finds nothing there. `recover --list` prints the real paths; so does the
+`Session workspace:` line at startup.)
+
 `recover --clean` deletes the disposable ones. A workspace whose changes
 haven't reached your files is kept and reported — including sessions on the
 bundled sample, where the workspace holds the only copy — so cleaning can't
