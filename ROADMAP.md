@@ -73,6 +73,22 @@ vision scanner will eventually consume.
 - **Still open:** Ben's per-turn latency verdict — the doc's 1C option
   (one long-lived stream-json process) is the planned upgrade path if
   spawning grates. That's the last open item on app v1.
+  **A proposal to close it by declining to choose is on the table**
+  (docs/MOBILE.md, 2026-08-21, unratified): void on the mobile path
+  (Anthropic's client owns the session loop, so there is no spawn to
+  optimize), 1B frozen on the desktop path. Unmeasured either way —
+  `self.turns` is incremented at `runner.py:107` and never read, and
+  `--resume` rehydrates the whole transcript per turn, so cost grows with
+  conversation length.
+- **Mobile-first proposal (docs/MOBILE.md, 2026-08-21, unratified):**
+  Claude Code cannot run on a phone (native-binary-only since ~v2.1.113),
+  and a third-party app that signs into a Claude subscription is
+  prohibited — but what PartsMatcher already does is explicitly permitted,
+  and Anthropic's Remote Control already is the phone-drives-my-Mac
+  feature. Proposal: PartsMatcher stops being the harness and becomes a
+  git repo with a `.claude/skills/` protocol the Claude app reads.
+  Hand-build kit in docs/bench-repo/. Gated on one five-minute test
+  (does a cloud session accept a camera-roll photo?) that only Ben can run.
 - **Standalone batch scanner** — unchanged in scope (photos in,
   inventory JSON out, no conversation; the inventory schema is its
   contract and `*.aliases.jsonl` supplies the naming vocabulary, 67
