@@ -1,0 +1,12 @@
+# setuptools' legacy sdist default picks up `test*.py` but not
+# `tests/__init__.py`, which makes the shipped tests silently
+# undiscoverable: `python -m unittest` inside an unpacked sdist reports
+# "Ran 0 tests ... OK". Ship the whole package so the suite a downstream
+# packager runs is the suite this project actually has.
+recursive-include tests *.py
+
+include LICENSE
+include README.md
+include ROADMAP.md
+include GATES.md
+include CONTRIBUTING.md
