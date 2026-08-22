@@ -1,0 +1,102 @@
+# Publish to PyPI via Trusted Publishing (OIDC) — no API tokens, no secrets.
+#
+# IMPORTANT: the filename of this file is part of the trust relationship.
+# PyPI matches it against the `job_workflow_ref` OIDC claim, so it must
+# equal the "Workflow name" registered on PyPI exactly — `release.yml`.
+# Renaming this file (or the repository) breaks publishing until the
+# publisher is re-registered. See docs/RELEASING.md.
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build and verify distributions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      # A tag push skips the PR checks, so re-run the suite here rather
+      # than publish a release nobody tested. Stdlib-only: no install step.
+      - name: Run the test suite
+        run: python3 -m unittest
+
+      - name: Install pypa/build and twine
+        run: python3 -m pip install --user build twine
+
+      - name: Build sdist and wheel
+        run: python3 -m build
+
+      # Catches a README that will not render on PyPI — which cannot be
+      # fixed after upload, because a filename is burned permanently.
+      - name: Check distribution metadata
+        run: python3 -m twine check dist/*
+
+      # The sdist ships the tests (see MANIFEST.in). Prove they actually
+      # run from it: without tests/__init__.py this reports "Ran 0 tests
+      # ... OK", which is green while testing nothing.
+      - name: Verify the sdist's own test suite runs
+        run: |
+          mkdir -p /tmp/sdistcheck
+          tar -xzf dist/*.tar.gz -C /tmp/sdistcheck
+          cd /tmp/sdistcheck/*/
+          python3 -m unittest 2>&1 | tee /tmp/sdist-tests.log
+          grep -qE "^Ran [1-9][0-9]* tests" /tmp/sdist-tests.log
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish-to-testpypi:
+    name: Publish to TestPyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/partsmatcher
+    permissions:
+      # Job-level only, and nothing else: unspecified permissions become
+      # `none`, so this job cannot touch repository contents.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: python-package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # TestPyPI burns filenames the same way PyPI does, so a re-run
+          # of the same tag would otherwise fail outright.
+          skip-existing: true
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: [build, publish-to-testpypi]
+    runs-on: ubuntu-latest
+    environment:
+      # Must match the environment registered on PyPI. Add yourself as a
+      # required reviewer on this environment so every real publish waits
+      # for a click — the upload is irreversible.
+      name: pypi
+      url: https://pypi.org/p/partsmatcher
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: python-package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
