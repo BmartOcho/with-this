@@ -130,11 +130,36 @@ class PermissionSettingsTests(unittest.TestCase):
             )
             settings = json.loads(path.read_text(encoding="utf-8"))
             allow = settings["permissions"]["allow"]
-            for tool in ("Read", "Edit", "Write"):
+            for tool in ("Read", "Glob", "Grep"):
                 self.assertIn(tool, allow)
             self.assertIn(
                 "Bash(python -m partsmatcher match inventory.json projects.json*)",
                 allow,
+            )
+
+    def test_writes_are_scoped_to_the_workspace(self):
+        # A bare "Write"/"Edit" entry would match every path on the
+        # filesystem, so a prompt-injected turn could write ~/.zshrc.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = app_module.write_permission_settings(Path(tmp))
+            allow = json.loads(path.read_text(encoding="utf-8"))["permissions"]["allow"]
+            for bare in ("Edit", "Write", "MultiEdit"):
+                self.assertNotIn(bare, allow)
+            resolved = str(Path(tmp).resolve()).lstrip("/")
+            self.assertIn(f"Edit(//{resolved}/**)", allow)
+
+    def test_no_write_or_multiedit_path_rules(self):
+        # Claude Code consults Edit(path) rules only: a Write(path) or
+        # MultiEdit(path) rule is accepted, never applied, and warns at
+        # startup. Writing one would look scoped while allowing nothing.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = app_module.write_permission_settings(Path(tmp))
+            allow = json.loads(path.read_text(encoding="utf-8"))["permissions"]["allow"]
+            self.assertFalse(
+                any(
+                    entry.startswith(("Write(", "MultiEdit(", "NotebookEdit("))
+                    for entry in allow
+                )
             )
 
     def test_allowlist_without_match_command_has_no_bash(self):
@@ -198,9 +223,15 @@ class ServerTestCase(unittest.TestCase):
         self.addCleanup(self.server.shutdown)
         self.port = self.server.server_address[1]
 
-    def request(self, method, path, body=None):
+    def request(self, method, path, body=None, token=True, origin=None):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         headers = {}
+        if token:
+            headers["X-PartsMatcher-Token"] = (
+                self.state.token if token is True else token
+            )
+        if origin is not None:
+            headers["Origin"] = origin
         if body is not None:
             body = json.dumps(body)
             headers["Content-Type"] = "application/json"
@@ -209,6 +240,57 @@ class ServerTestCase(unittest.TestCase):
         data = response.read()
         conn.close()
         return response.status, data
+
+
+class CrossSiteTests(ServerTestCase):
+    """A page on another origin must not be able to drive the session."""
+
+    def test_end_without_token_is_refused_and_does_not_sync(self):
+        # The real bug this guards: any site you visit while the app runs
+        # could POST /api/end, overwriting the real inventory file and
+        # shutting the server down.
+        status, _ = self.request("POST", "/api/end", token=False)
+        self.assertEqual(status, 403)
+        self.assertEqual(self.sync_calls, [])
+        self.assertFalse(self.state.synced)
+
+    def test_message_without_token_is_refused_and_runs_no_turn(self):
+        status, _ = self.request(
+            "POST", "/api/message", body={"text": "hi"}, token=False
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(self.runner.messages, [])
+
+    def test_wrong_token_is_refused(self):
+        status, _ = self.request("POST", "/api/end", token="not-the-token")
+        self.assertEqual(status, 403)
+        self.assertEqual(self.sync_calls, [])
+
+    def test_foreign_origin_is_refused_even_with_the_token(self):
+        status, _ = self.request(
+            "POST", "/api/message", body={"text": "hi"}, origin="http://evil.example"
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(self.runner.messages, [])
+
+    def test_own_origin_is_accepted(self):
+        status, _ = self.request(
+            "POST",
+            "/api/message",
+            body={"text": "hi"},
+            origin=f"http://127.0.0.1:{self.port}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(self.runner.messages, ["hi"])
+
+    def test_unknown_post_path_still_404s_before_any_auth_check(self):
+        status, _ = self.request("POST", "/api/nope", token=False)
+        self.assertEqual(status, 404)
+
+    def test_served_page_embeds_this_session_token(self):
+        status, data = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn(self.state.token.encode(), data)
 
 
 class ServerTests(ServerTestCase):
@@ -331,10 +413,20 @@ class PageContractTests(unittest.TestCase):
         # /api/state hands the kickoff out exactly once, so the page must
         # read it from its single refreshState() fetch — a second startup
         # fetch would find the kickoff already consumed and never fire it.
-        from partsmatcher.app.page import PAGE_HTML
+        from partsmatcher.app.page import render_page
 
-        self.assertEqual(PAGE_HTML.count("fetch('/api/state')"), 1)
-        self.assertIn("const state = await refreshState()", PAGE_HTML)
+        page = render_page("tok")
+        self.assertEqual(page.count("fetch('/api/state')"), 1)
+        self.assertIn("const state = await refreshState()", page)
+
+    def test_page_carries_the_session_token_on_every_post(self):
+        from partsmatcher.app.page import TOKEN_PLACEHOLDER, render_page
+
+        page = render_page("sekrit-token")
+        self.assertNotIn(TOKEN_PLACEHOLDER, page)
+        self.assertIn("const PM_TOKEN = 'sekrit-token';", page)
+        # Both POST call sites must send it, or the page can't drive itself.
+        self.assertEqual(page.count("'X-PartsMatcher-Token': PM_TOKEN"), 2)
 
 
 class RunAppTests(unittest.TestCase):
@@ -382,7 +474,7 @@ class RunAppTests(unittest.TestCase):
                 )
             )
             allow = settings["permissions"]["allow"]
-            self.assertIn("Edit", allow)
+            self.assertIn(app_module._workspace_edit_rule(workspace), allow)
             self.assertTrue(
                 any("partsmatcher match" in entry for entry in allow)
             )

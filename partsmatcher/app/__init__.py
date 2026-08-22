@@ -50,7 +50,28 @@ SETTINGS_RELPATH = Path(".claude") / "settings.local.json"
 # Headless turns can't show interactive permission prompts, so the
 # workspace pre-allows exactly what sessions already do today: editing the
 # workspace's own files and re-running the deterministic matcher.
-BASE_ALLOWED_TOOLS = ["Read", "Glob", "Grep", "Edit", "Write", "MultiEdit"]
+#
+# Read-only tools stay unscoped (they were before, and narrowing them
+# risks denying a legitimate read with no prompt to recover from), but
+# every WRITE is pinned to this session's workspace — see
+# `_workspace_edit_rule`.
+BASE_ALLOWED_TOOLS = ["Read", "Glob", "Grep"]
+
+
+def _workspace_edit_rule(workspace: Path) -> str:
+    """The allow rule that pins file writes to `workspace`.
+
+    Claude Code checks file permissions against `Edit(path)` and
+    `Read(path)` rules *only* — a `Write(...)` or `MultiEdit(...)` path
+    rule is accepted but never consulted — so `Edit()` is the rule that
+    actually binds the Write and MultiEdit tools too. A bare `Write`
+    would match every path on the filesystem, which is what this
+    replaces.
+
+    `//` is the absolute-path anchor, so `/tmp/ws` becomes `//tmp/ws/**`.
+    """
+    absolute = str(Path(workspace).resolve()).lstrip("/")
+    return f"Edit(//{absolute}/**)"
 
 
 def write_permission_settings(
@@ -58,6 +79,7 @@ def write_permission_settings(
 ) -> Path:
     """Write the workspace tool allowlist headless mode needs."""
     allow = list(BASE_ALLOWED_TOOLS)
+    allow.append(_workspace_edit_rule(workspace))
     if match_command:
         allow.append(f"Bash({match_command}*)")
     settings_path = workspace / SETTINGS_RELPATH
