@@ -27,6 +27,24 @@ jobs:
         with:
           python-version: "3.x"
 
+      # The tag does NOT set the published version — pyproject.toml does,
+      # and the tag is only a trigger. Tagging v0.7.1rc1 against a
+      # pyproject saying 0.7.1 publishes plain 0.7.1, burning that
+      # filename forever under a tag that lies about what it shipped.
+      # That happened once; this is why it can't happen again. First
+      # step in the job, so it fails before anything is built.
+      - name: Check the tag matches the packaged version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(python3 -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
+          echo "tag version:      $TAG"
+          echo "packaged version: $PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match the version in pyproject.toml ('$PKG'). Either bump pyproject.toml to $TAG, or delete this tag and push v$PKG. Nothing was built or published."
+            exit 1
+          fi
+          echo "Match. Safe to build."
+
       # A tag push skips the PR checks, so re-run the suite here rather
       # than publish a release nobody tested. Stdlib-only: no install step.
       - name: Run the test suite
