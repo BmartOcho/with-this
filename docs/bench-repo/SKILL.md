@@ -1,6 +1,7 @@
 ---
 name: partsmatcher
 description: Workbench assistant for the parts Benjamin actually owns. Use whenever he adds, removes, or photographs electronics parts, asks what he can build, wants a project drafted or adapted, pastes a build-plan URL, or asks to reconcile part names. Owns inventory intake, photo intake, project-database authoring, and the deterministic three-bucket match report.
+allowed-tools: Bash(python3 -m partsmatcher match*), Read, Glob, Grep, Edit, Write, WebFetch
 ---
 
 # PartsMatcher — workbench session
@@ -24,7 +25,13 @@ After **any** write to anything in `data/`, immediately:
    recompute any part of it by hand.
 3. Print a one-line delta beneath it, e.g.
    `59 → 60 part types, 547 → 572 parts; new BUILD NOW: Sunset Night-Light`.
-4. `git add -A && git commit` with a short message naming what changed.
+4. `git add -A && git commit` with a short message naming what changed, then
+   **push directly to `main`. Do not create a branch and do not open a pull
+   request.** This is personal inventory data, not reviewable code — a
+   branch here just means the next session reads a stale inventory until
+   someone merges, and merging is not something the Claude mobile app can
+   do. If a push to `main` is refused, say so plainly and stop rather than
+   silently falling back to a branch.
 
 This report replaces a live sidebar. It is deterministic and takes under a
 second, and the only way it goes missing is if you forget — so it is the

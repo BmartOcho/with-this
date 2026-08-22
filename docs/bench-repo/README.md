@@ -35,26 +35,52 @@ $ claude
 
 Press space for the QR code and scan it from the Claude app.
 
+For the cloud-session path (laptop off), also push it to a **private GitHub
+repo** — cloud sessions clone from GitHub, and GitLab/Bitbucket can't push
+results back.
+
 ## What to check before you trust it
 
-**Step 0 first, five minutes, because it can change the architecture:** on
-your phone, start any Claude Code cloud session against any repo and try to
-attach a camera-roll photo. Whether that works decides whether this survives
-your laptop being asleep. It is the one load-bearing thing nobody could
-verify from documentation.
+**The camera-roll photo test passed (Ben, 2026-08-22):** a cloud session
+accepts a photo attached from the phone. The laptop-off path is real.
 
-Then at the drawers — photograph one compartment, confirm by voice, and
-watch `data/inventory.json` get committed. Write down: taps from pocket to
-first photo, seconds to first useful text, whether voice actually worked
-with dirty hands, whether the three-bucket report was readable at arm's
-length, and whether a drawer-wide shot produced confident nonsense.
+At the drawers — photograph one compartment, confirm by voice, and watch
+`data/inventory.json` get committed. Write down: taps from pocket to first
+photo, seconds to first useful text, whether voice actually worked with
+dirty hands, whether the three-bucket report was readable at arm's length,
+and whether a drawer-wide shot produced confident nonsense.
+
+Two things to watch on the first cloud run specifically:
+
+- **Did it push to `main`, or open a branch?** A cloud session's default is
+  to commit on an auto-generated `claude/<slug>-<suffix>` branch and push
+  that, with no PR opened. `SKILL.md` instructs it to push straight to
+  `main` instead, and auto mode (the default on Pro/Max since 2026-08-14)
+  permits default-branch pushes — but the direct-to-`main` push itself was
+  never tested end to end, only branch-creating pushes were. If it opens a
+  branch anyway, the loop still works; it just costs a merge you can't do
+  from the Claude app.
+- **Did the matcher run without a prompt?** Cloud sessions offer only
+  Accept edits, Plan and Auto — never Bypass. Accept edits pre-approves
+  file edits but *not* arbitrary Bash, so the matcher can prompt there;
+  Auto normally lets it through. The `allowed-tools:` line in `SKILL.md`
+  frontmatter is the reliable belt: skill `allowed-tools` is never gated on
+  workspace trust, whereas `settings.json` `permissions.allow` may be — and
+  a cloned cloud repo starts untrusted.
 
 ## Notes
 
 - `settings.json` mirrors `BASE_ALLOWED_TOOLS`
   (`partsmatcher/app/__init__.py:53`) plus `WebFetch` for build-plan URLs
   and the git commands the standing rule needs. Keep the two in sync by
-  hand until `init-repo` generates both from one source.
+  hand until `init-repo` generates both from one source. It is read in a
+  cloud session (it's part of the clone), but treat it as the belt and
+  `SKILL.md`'s `allowed-tools:` as the suspenders — repo `permissions.allow`
+  rules are gated on workspace trust, and the docs never resolve what a
+  freshly cloned cloud repo counts as.
+- Cloud sessions run Ubuntu 24.04 with Python preinstalled (3.11.15
+  observed 2026-08-22; the docs promise only "Python 3.x"). A stdlib-only
+  package needs no install step — `python3 -m partsmatcher` just works.
 - The copied `partsmatcher/` package is a **copy**. Improvements in
   `with-this` will not reach it, and a stale matcher on the phone is
   invisible. Re-copy when the matcher changes.
