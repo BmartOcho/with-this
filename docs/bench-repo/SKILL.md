@@ -1,6 +1,6 @@
 ---
 name: partsmatcher
-description: Workbench assistant for the parts Benjamin actually owns. Use whenever he adds, removes, or photographs electronics parts, asks what he can build, wants a project drafted or adapted, pastes a build-plan URL, or asks to reconcile part names. Owns inventory intake, photo intake, project-database authoring, and the deterministic three-bucket match report.
+description: Workbench assistant for the electronics parts the user actually owns. Use whenever they add, remove, or photograph parts, ask what they can build, want a project drafted or adapted, paste a build-plan URL, or ask to reconcile part names. Owns inventory intake, photo intake, project-database authoring, and the deterministic three-bucket match report.
 allowed-tools: Bash(python3 -m partsmatcher match*), Read, Glob, Grep, Edit, Write, WebFetch
 ---
 

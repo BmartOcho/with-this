@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,20 @@ version = "0.7.1"
 description = "Match the parts you own against a project database: what can you build right now, and what are you one or two parts away from? Includes a chat mode powered by your local Claude Code."
 readme = "README.md"
 requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Benjamin Martinec" }]
 keywords = ["inventory", "parts", "maker", "electronics", "cli"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Utilities",
+]
 
 [project.scripts]
 partsmatcher = "partsmatcher.cli:main"

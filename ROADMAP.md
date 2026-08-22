@@ -120,12 +120,18 @@ vision scanner will eventually consume.
   intake → vocabulary alignment/reconcile → recover + mid-session matcher
   command → CI → project-database intake → kickoff greeting polish →
   local app → workspace list/clean).
-- 151 stdlib `unittest` tests; the chat and app tests inject fakes, so the suite
+- 168 stdlib `unittest` tests; the chat and app tests inject fakes, so the suite
   never needs Claude installed. CI: GitHub Actions runs the suite plus a
   sample-data smoke run on every PR and push to main (Python 3.9 + 3.13).
-- User-side data lives on Ben's machine, not in this repo:
-  `my_inventory.json` (59 part types / 547 parts — the WS2812B NeoPixel
-  strip arrived via the app on 2026-08-08), `my_projects.json`
-  (11 projects, all BUILD NOW; nothing uses the NeoPixels yet — the
-  session offered an ambient-desk-light project, not yet taken),
-  their `.bak` files, and `my_inventory.aliases.jsonl` (69 records).
+- **User-side data was lost (noticed 2026-08-22).** This section previously
+  recorded `my_inventory.json` at 59 part types / 547 parts,
+  `my_projects.json` at 11 projects, and `my_inventory.aliases.jsonl` at 69
+  alias records, all living on Ben's machine outside the repo. A search of
+  that machine found none of them — no `my_*` files, no `*.aliases.jsonl`,
+  and no leftover chat workspaces holding a copy. They are gone, and the
+  69-record alias dataset went with them.
+  The lesson, recorded because it drives a roadmap item: user data that
+  lives only in a temp-directory workspace and one untracked file in a home
+  directory has no backup story at all. `partsmatcher init-repo` — putting
+  the inventory in a git repo of its own — is now the answer to that, not
+  just a convenience for the mobile path.

@@ -123,14 +123,21 @@ documents in Cowork.
 
 Serve the existing page to the phone by binding beyond loopback.
 
-- **Against, decisively:** `partsmatcher/app/` has no authentication of any
-  kind — `POST /api/end` needs no credential, writes to the real
-  `my_inventory.json`, and shuts the server down. Binding it beyond loopback
-  makes an unauthenticated, file-editing, shell-running endpoint. Separately:
-  the moment more than one person can reach it, one subscription is being
-  intermediated for several users, which is the prohibited act. There is also
-  a live report that `tailscale serve` buffers SSE, which would make turns
-  hang in a way that reads as a Claude bug.
+- **Against, decisively:** binding this server beyond loopback exposes a
+  file-editing, shell-running endpoint to the network. Its POST endpoints
+  now require a per-session token and a same-origin check (see `GATES.md`),
+  but that was designed to stop a *browser* on the same machine, not to
+  harden a service against the network — a token in a URL on a shared wifi
+  is a different threat model, and the sync still writes the user's real
+  `my_inventory.json`. Separately: the moment more than one person can
+  reach it, one subscription is being intermediated for several users,
+  which is the prohibited act. There is also a live report that
+  `tailscale serve` buffers SSE, which would make turns hang in a way that
+  reads as a Claude bug.
+
+  *(This bullet originally read "has no authentication of any kind", which
+  was true when written on 2026-08-21 and fixed the following day. The
+  argument against binding to the LAN does not depend on it.)*
 
 **Recommendation: 1A as the everyday loop, 1B as the laptop-off fallback.**
 The photo test passed, so both are open, and they are not exclusive — the
