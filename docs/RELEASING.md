@@ -67,23 +67,43 @@ a publisher (the form is gated on it).
 1. Bump `version` in `pyproject.toml`. Update `ROADMAP.md`.
 2. Locally: `python3 -m unittest` and `python3 -m build && python3 -m twine check dist/*`.
 3. Commit, merge to `main`.
-4. Tag and push:
+4. Tag and push, **matching the version exactly**:
 
    ```console
    $ git tag v0.7.1
    $ git push origin v0.7.1
    ```
 
-5. The workflow builds, runs the suite, verifies the sdist's tests
-   actually run, publishes to **TestPyPI**, then waits for your approval
-   before touching PyPI.
+5. The workflow checks the tag against `pyproject.toml`, builds, runs the
+   suite, verifies the sdist's tests actually run, publishes to
+   **TestPyPI**, then waits for your approval before touching PyPI.
 6. Approve the `pypi` deployment. The pending publisher fires, creates
    the project, and converts itself into a normal publisher. Nothing
    further to configure — later releases just work.
 
-**For the very first release, consider a release-candidate tag**
-(`v0.7.1rc1`) so TestPyPI takes the hit if anything is misconfigured.
-A real version number spent on a broken upload is spent forever.
+### The tag does not set the version
+
+`pyproject.toml` does. The tag is only a trigger, and the two are
+independent — so tagging `v0.7.1rc1` against a pyproject that says
+`0.7.1` publishes plain **`0.7.1`**, permanently burning that filename
+under a tag that misdescribes it. That is exactly what happened on
+2026-08-22 (TestPyPI, harmlessly), and it is why the workflow's first
+step now refuses a mismatch before anything is built.
+
+**To publish a real release candidate**, set *both*:
+
+```toml
+version = "0.7.2rc1"
+```
+
+```console
+$ git tag v0.7.2rc1 && git push origin v0.7.2rc1
+```
+
+PyPI treats `rc` as a pre-release, so `pip install partsmatcher` skips it
+unless the user passes `--pre`. That is the only way to get a version
+number you can afford to throw away — a rehearsal that keeps the real
+number free.
 
 ## When the OIDC exchange fails
 
