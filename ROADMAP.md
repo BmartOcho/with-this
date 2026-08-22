@@ -87,8 +87,17 @@ vision scanner will eventually consume.
   and Anthropic's Remote Control already is the phone-drives-my-Mac
   feature. Proposal: PartsMatcher stops being the harness and becomes a
   git repo with a `.claude/skills/` protocol the Claude app reads.
-  Hand-build kit in docs/bench-repo/. Gated on one five-minute test
-  (does a cloud session accept a camera-roll photo?) that only Ben can run.
+  Hand-build kit in docs/bench-repo/.
+- **Photo test passed (Ben, 2026-08-22):** a cloud session accepts a
+  camera-roll photo attached from the phone, so the laptop-off path is
+  real. Follow-up verification also found the write-back wrinkle — a cloud
+  session defaults to an auto-generated `claude/*` branch with no PR, and
+  merging isn't something the Claude mobile app does, so SKILL.md now
+  instructs a direct push to `main` (permitted by auto mode; the
+  ref-advancing push itself is still untested). And skill `allowed-tools:`
+  frontmatter, not `settings.json`, is what reliably pre-authorizes the
+  matcher — repo `permissions.allow` is gated on workspace trust, which a
+  freshly cloned cloud repo may not have. Next: the bench-repo evening.
 - **Standalone batch scanner** — unchanged in scope (photos in,
   inventory JSON out, no conversation; the inventory schema is its
   contract and `*.aliases.jsonl` supplies the naming vocabulary, 67

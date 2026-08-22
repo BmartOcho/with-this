@@ -72,11 +72,40 @@ only in shared rate limits.
   `.claude/skills/` **is** loaded — documented, not inferred.
 - **Against:** requires GitHub (GitLab/Bitbucket can only be sent as a local
   bundle, which needs a checkout, and can't push back), so the inventory
-  moves to a private GitHub repo. Still labelled research preview.
-  **UNVERIFIED and load-bearing: whether a cloud session accepts a
-  camera-roll photo attachment.** Anthropic's attachment language is scoped
-  to Remote Control; the Claude Code on the web page has zero mentions of
-  image or file upload. Five-minute test — see First milestone.
+  moves to a private GitHub repo. Still labelled research preview. And the
+  write-back is indirect — see below.
+- **VERIFIED 2026-08-22 (Ben, live):** a cloud session **does** accept a
+  camera-roll photo attached from the phone. This was the load-bearing
+  unknown; the laptop-off path is real.
+
+### The write-back step (verified 2026-08-22)
+
+A cloud session's default is to commit on an auto-generated
+`claude/<slug>-<suffix>` branch and push **that** — no PR is opened
+automatically; "Create PR" is an explicit button. For code that's correct.
+For personal inventory data it is a trap: the next session clones `main`
+and reads a stale inventory until someone merges, and **merging is not a
+documented capability of the Claude mobile app** — you'd need the GitHub
+app or a browser. That is a merge step standing between a workbench gesture
+and your own data.
+
+It is collapsible. Auto mode — the default on Pro/Max/Team since
+2026-08-14 — *"allows pushes to any branch of the repository you're working
+in, including the default branch."* The lever is not a UI toggle but a
+repo-committed instruction, which is why `SKILL.md` carries "push directly
+to `main`, do not create a branch or open a PR." (There is also an
+`outcome_branch` field live on the session-creation API — *"the session
+pushes directly to this branch (no session-derived suffix appended)"* —
+undocumented on code.claude.com.)
+
+**Still untested:** a ref-*advancing* push to `main` from a cloud session.
+Branch-*creating* pushes to non-working branches were confirmed to succeed,
+and the classifier permits default-branch pushes, but nobody fast-forwarded
+a real `main` to prove the last link. Watch it on the first run.
+
+This is why the recommendation below is Remote Control **first**: it edits
+your real local files in place, exactly as chat mode does today, with no
+write-back step to get wrong.
 
 ### Option 1C: Cowork
 
@@ -103,9 +132,12 @@ Serve the existing page to the phone by binding beyond loopback.
   a live report that `tailscale serve` buffers SSE, which would make turns
   hang in a way that reads as a Claude bug.
 
-**Recommendation: 1A now, 1B as well if the photo test passes.** They are
-not exclusive — the same repo works under both, so the test decides how much
-freedom you get, not which architecture to build.
+**Recommendation: 1A as the everyday loop, 1B as the laptop-off fallback.**
+The photo test passed, so both are open, and they are not exclusive — the
+same repo works under either. Remote Control goes first because it edits
+your real files in place with no write-back step; cloud sessions cost you
+either a direct-to-`main` push (permitted, but the last link is untested)
+or a merge you can't perform from the Claude app.
 
 ## Decision 2 — what PartsMatcher becomes
 
@@ -297,14 +329,11 @@ periodically; AI-crawler directives have been churning.
 Hand-build the bench repo and walk the literal moment, before writing a line
 of new Python. One evening.
 
-**Step 0, five minutes, do this first because it can change the
-architecture:** on the phone, start any Claude Code cloud session against
-any repo and try to attach a camera-roll photo. Write down what happens. If
-it works, the bench repo survives the laptop being asleep in the garage. If
-it doesn't, Remote Control still works but the Mac must stay awake — decide
-whether that's acceptable *before* spending a week on tooling.
+**Step 0 is done (2026-08-22): the photo test passed.** A cloud session
+accepts a camera-roll attachment, so the bench repo survives the laptop
+being asleep in the garage.
 
-Then: copy `partsmatcher/` into `~/bench/` (stdlib only, so a plain copy
+Copy `partsmatcher/` into `~/bench/` (stdlib only, so a plain copy
 needs no install), copy the real inventory/projects/aliases into `data/`,
 copy `docs/bench-repo/SKILL.md` and `settings.json` into `.claude/`, paste
 the protocol into a root `CLAUDE.md` as a hedge, `git init && commit`, then
@@ -347,8 +376,8 @@ metadata, so EXIF orientation must be baked into pixels.
 
 ## Open questions for Ben
 
-1. **Does a cloud session accept a camera-roll photo?** Five minutes, and
-   the highest-leverage unknown here.
+1. ~~**Does a cloud session accept a camera-roll photo?**~~ **Answered
+   2026-08-22: yes.** The laptop-off path exists.
 2. **Does your bench actually have signal?** Walk out there with the phone.
    If it doesn't, everything above is wrong and the conversation becomes
    offline-first — three weeks, a permanent two-matcher parity tax, and it
