@@ -23,6 +23,12 @@ classifiers = [
   "Topic :: Utilities",
 ]
 
+[project.urls]
+Homepage = "https://github.com/BmartOcho/with-this"
+Repository = "https://github.com/BmartOcho/with-this"
+Issues = "https://github.com/BmartOcho/with-this/issues"
+Changelog = "https://github.com/BmartOcho/with-this/blob/main/ROADMAP.md"
+
 [project.scripts]
 partsmatcher = "partsmatcher.cli:main"
 
