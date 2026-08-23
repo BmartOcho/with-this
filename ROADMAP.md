@@ -98,6 +98,16 @@ vision scanner will eventually consume.
   frontmatter, not `settings.json`, is what reliably pre-authorizes the
   matcher — repo `permissions.allow` is gated on workspace trust, which a
   freshly cloned cloud repo may not have. Next: the bench-repo evening.
+- **MCP server shipped (`partsmatcher mcp`, 2026-08-23):** the matcher as
+  Model Context Protocol tools over stdio — `get_inventory`,
+  `match_projects`, `check_bom` (the HEPH `out/bom.json` adapter from
+  docs/BUILDER.md layer 2, exact-name matching with closest-name hints).
+  Files re-read per call so mid-session edits are seen; 30 tests, all
+  in-process fakes. Proven as a bench-repo hack first, same day, live
+  inside HEPH Studio's embedded Claude session ("do I own the parts for
+  this design?" → three tool calls → BUILD NOW), then ported here.
+  Register machine-wide with `claude mcp add --scope user partsmatcher --
+  python -m partsmatcher mcp INVENTORY PROJECTS`.
 - **Standalone batch scanner** — unchanged in scope (photos in,
   inventory JSON out, no conversation; the inventory schema is its
   contract and `*.aliases.jsonl` supplies the naming vocabulary, 67

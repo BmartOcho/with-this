@@ -36,7 +36,7 @@ SAMPLE_DIR = Path(__file__).resolve().parent / "samples"
 SAMPLE_INVENTORY = SAMPLE_DIR / "inventory.json"
 SAMPLE_PROJECTS = SAMPLE_DIR / "projects.json"
 
-KNOWN_COMMANDS = ("match", "chat", "app", "recover")
+KNOWN_COMMANDS = ("match", "chat", "app", "recover", "mcp")
 _TOP_LEVEL_FLAGS = ("-h", "--help", "--version")
 
 
@@ -232,6 +232,21 @@ def build_parser() -> argparse.ArgumentParser:
             "in the workspace instead of syncing them back to your files"
         ),
     )
+
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="serve the matcher as MCP tools over stdio for Claude Code",
+        description=(
+            "Run a Model Context Protocol server on stdin/stdout exposing "
+            "get_inventory, match_projects and check_bom as tools, so any "
+            "Claude Code session on this machine can consult the real "
+            "inventory instead of guessing. Files are re-read on every "
+            "call. Register once, machine-wide:  claude mcp add --scope "
+            "user partsmatcher -- python -m partsmatcher mcp INVENTORY "
+            "PROJECTS"
+        ),
+    )
+    _add_input_arguments(mcp_parser)
 
     recover_parser = subparsers.add_parser(
         "recover",
@@ -543,6 +558,20 @@ def _run_app(args: argparse.Namespace) -> int:
     return result
 
 
+def _run_mcp(args: argparse.Namespace) -> int:
+    from .mcp import MCPServer
+
+    inventory_path = _resolve_input_path(args.inventory, SAMPLE_INVENTORY, "inventory")
+    projects_path = _resolve_input_path(args.projects, SAMPLE_PROJECTS, "projects")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdin.reconfigure(encoding="utf-8")
+    MCPServer(
+        inventory_path, projects_path, almost_threshold=args.almost
+    ).serve()
+    return 0
+
+
 def _run_recover(args: argparse.Namespace) -> int:
     from . import chat  # imported lazily: `match` never touches chat machinery
 
@@ -590,6 +619,8 @@ def main(argv: "list[str] | None" = None) -> int:
         return _run_app(args)
     if args.command == "recover":
         return _run_recover(args)
+    if args.command == "mcp":
+        return _run_mcp(args)
     return _run_match(args)
 
 
