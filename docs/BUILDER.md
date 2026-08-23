@@ -9,8 +9,11 @@ commercial MVP for inventory capture ("Add Inventory" button → camera →
 confirm name → enter quantity); the LLM-heavy *builder* half ("what can I
 actually build?") running on **users' own native model subscriptions**, not
 metered API calls, against a scaffolding we provide; and building the
-**electronics component** of a friend's working chat→3D-print generator,
-with PartsMatcher's inventory as its auto-check layer.
+**electronics component** of HEPH — a friend's working chat→3D-print
+generator, installed and inspected locally on 2026-08-23 (see Decision 2) —
+with PartsMatcher's inventory as its auto-check layer. The collaboration is
+already live in spirit: HEPH's author has accepted Ben's help, and some of
+Ben's ideas ship in the program today.
 
 ## The three facts that decide this
 
@@ -97,36 +100,101 @@ identity, count). Quantity is a number pad, not an inference.
 **Recommendation: B**, with C's spirit retained — anything expressible as
 a deterministic tool stays out of the model entirely.
 
-## Decision 2 — the electronics component of the 3D generator
+## Decision 2 — the electronics component of HEPH
 
 The generator answers *"what could exist?"*; PartsMatcher answers *"what
 can happen tonight, with these drawers?"* The integration is one tool
-call: their pipeline emits an electronics BOM, `check_bom` returns the
-three-bucket verdict, per-part shortfalls, and a shopping list **net of
-what the user owns**.
+call: HEPH emits an electronics BOM, `check_bom` returns the three-bucket
+verdict, per-part shortfalls, and a shopping list **net of what the user
+owns**.
 
-Layered scope, ascending difficulty — each layer shippable alone:
+### What HEPH turned out to be (inspected locally, 2026-08-23)
 
-1. **Check API** (`check_bom`): a thin wrapper over `matcher.py`. Days.
-2. **Vocabulary bridging:** a generator says "0.1uF ceramic capacitor
-   0603"; an inventory says "assorted caps x1". Exact-match fails
-   machine-to-machine constantly. This is reconcile industrialized, seeded
-   by the alias dataset — the hard, valuable middle.
-3. **Substitution modeling:** parked in ROADMAP "Later," **promoted to
+HEPH v0.1.6 — *"text to working mechanical object: plan, sculpt, validate,
+ship printable STLs"* — is a Tauri desktop app (HEPH Studio: 3D viewer
+beside a terminal) with a compiled Python 3.13 core, driving **the user's
+own Claude Code** through a per-project `CLAUDE.md` and MCP tools
+(`heph_rebuild`, `heph_state`, `heph_catalog`, `heph_ship`). That is the
+**same BYO-model architecture this doc recommends** — protocol file + MCP
+tools + deterministic core + the user's own subscription — independently
+converged on. Both halves of the partnership already speak the paradigm;
+fact 1 above is its legal basis and fact 3 its field evidence.
+
+Its electronics layer is **more built-out than expected** — this is not
+greenfield. The catalogue drives everything from one entry: auto-generated
+standoffs on real hole patterns, connector keepout volumes ("a wall
+fouling a USB plug is a validation error rather than a discovery made with
+a soldering iron"), per-dimension confidence tiers (datasheet / common /
+nominal), power budgeting with brownout arithmetic, wire-gauge-from-current
+netlists, and harness routing that cuts cable troughs into the model.
+
+The real gaps, from inspection plus Ben's hands-on testing:
+
+- **Catalogue breadth.** ~23 curated, robot-shaped components
+  (`arduino_nano`, `esp32devkit`, `pi4/pi5/pizero2w`, `picam3`,
+  `sg90`, `mg996r`, `nema17`, `n20_gearmotor`, `tt_motor`, `l298n`,
+  `tb6612`, `hcsr04`, `mpu6050`, `ssd1306`, `mp1584`, `xl4015`,
+  18650 packs, wheels, casters). Ben's bench alone holds 76 part types.
+  Growing entries — hole patterns, keepouts, power figures, honest
+  confidence tiers — is exactly the electronics domain work on offer.
+- **No concept of ownership.** The BOM prices everything as purchased and
+  emits Amazon *search* URLs. This is the PartsMatcher-shaped hole.
+- **Electronics UX is clunky** (Ben's word, from real use), and the
+  shopping-list links never opened in a browser anywhere — the purchase
+  affordance is broken in practice, which makes "net of what you own"
+  land even harder: the best shopping list is a shorter one.
+
+### The seams already exist, on both sides
+
+- **HEPH's output:** `out/bom.json` is structured — lines of
+  `{key, description, qty, category, note, url, unit_usd}`. The adapter to
+  the matcher's `{name, quantity}` contract is a dozen lines. The neutral
+  v0 interchange below survives as the format for any *other* generator;
+  for HEPH the contract is "adapter over `bom.json`".
+- **HEPH's input:** `parts.load_overrides("my-parts.json")` — a documented
+  hook for user-supplied catalogue entries. So the integration runs both
+  directions: BOM → PartsMatcher ("you own 3 of these 5; short an L298N —
+  but you have an L293D, want the substitution?"), and inventory → a
+  generated overrides file, so HEPH designs around the drawers from the
+  start.
+- **The vocabulary bridge has a live test fixture.** Ben's real inventory
+  vs. HEPH's catalogue ids: "HC-SR04 ultrasonic sensor" ↔ `hcsr04`,
+  "TT gear motor" ↔ `tt_motor`, "SG90 micro servo" ↔ `sg90` — while the
+  Arduino **Uno** (Ben's main board) is absent from the catalogue
+  (`arduino_nano` only), and Ben's L293D sits adjacent to `l298n`/`tb6612`.
+  Layers 2–3 below are demonstrable today with files on this machine.
+
+### Layered scope, ascending difficulty — each layer shippable alone
+
+1. **Catalogue expansion:** new component entries with real hole patterns,
+   keepouts, power figures and honest confidence tiers. High value,
+   cleanly scoped, touches nothing in HEPH's core — and the author has
+   already accepted Ben's help, so this can start immediately.
+2. **Check API** (`check_bom`) + the `bom.json` adapter: a thin wrapper
+   over `matcher.py`. Days. A local demo — hatrack `bom.json` vs. the real
+   bench inventory — is an afternoon.
+3. **Vocabulary bridging:** HEPH says `l298n`; an inventory says "L293D
+   motor driver". Exact-match fails machine-to-machine constantly. This is
+   reconcile industrialized, seeded by the alias dataset — the hard,
+   valuable middle.
+4. **Substitution modeling:** parked in ROADMAP "Later," **promoted to
    core by this integration**. The bench sessions hand-applied
    Uno-for-Nano across 9 projects; a generator needs it automatic and
    honest ("Uno works here: same 5V logic; check enclosure fit").
-   Electrical-compatibility reasoning is the domain expertise Ben is
-   offering to bring.
-4. **Wiring validation** (their proposed runs vs. actual pinouts):
-   further out, same shape.
+   Electrical-compatibility reasoning is the domain expertise Ben brings.
+5. **Wiring validation** (proposed runs vs. actual pinouts): further out,
+   same shape — though HEPH's netlist/harness layer means this is closer
+   than it looked before inspection.
 
-**Boundary to fix in writing before code:** their system emits a BOM in an
-agreed format; we own everything from BOM to bench. PartsMatcher is a
-component with an API contract, not a contributor to their codebase.
+**Boundary to fix in writing before code:** friendly acceptance of help is
+not a scope agreement. The clean line stands: HEPH emits a BOM in an
+agreed format; PartsMatcher owns everything from BOM to bench. Catalogue
+entries (layer 1) are contributions *into* HEPH and should be licensed/
+credited explicitly; layers 2–5 are PartsMatcher's, reached through the
+contract.
 
-Proposed BOM interchange (v0, deliberately minimal — it *is* the existing
-projects schema plus provenance):
+Neutral BOM interchange (v0, for generators that aren't HEPH — it *is* the
+existing projects schema plus provenance):
 
 ```json
 {
@@ -139,7 +207,7 @@ projects schema plus provenance):
 ```
 
 `name`/`quantity` are required and match the matcher's contract today;
-the rest is optional context for layers 2–3.
+the rest is optional context for layers 3–4.
 
 ## What happens to the existing code
 
@@ -173,10 +241,15 @@ the rest is optional context for layers 2–3.
    exists? (The Commercial ToS obligation from MOBILE.md attaches to
    distributing software that *runs* Claude Code — the personal `app/`
    surface — regardless.)
-4. **The friend conversation.** What does their electronics BOM look like
-   today — structured data or prose? Can their pipeline call an external
-   HTTP API mid-generation? What vocabulary do they emit? And the
-   ownership boundary above, agreed in writing.
+4. **The HEPH conversation.** The format questions answered themselves at
+   inspection (`bom.json` out, `load_overrides` in, catalogue ids as the
+   vocabulary). What remains is the human part: the ownership boundary
+   above agreed in writing, whether HEPH's author wants `check_bom` called
+   from inside HEPH or PartsMatcher consuming `out/` from outside, and
+   whether catalogue contributions land upstream or via an overrides pack
+   PartsMatcher ships. Also worth raising: the broken shopping-link
+   affordance — if PartsMatcher supplies the net-of-owned shopping list,
+   that UX problem may be ours to solve, not theirs.
 5. **Consent and privacy for the alias/photo corpus.** Opt-in wording,
    what's retained, whether photos ever train anything beyond the user's
    own inventory.
