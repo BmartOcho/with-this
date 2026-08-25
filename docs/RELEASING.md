@@ -66,6 +66,10 @@ a publisher (the form is gated on it).
 
 1. Bump `version` in `pyproject.toml`. Update `ROADMAP.md`.
 2. Locally: `python3 -m unittest` and `python3 -m build && python3 -m twine check dist/*`.
+   Then run the real-Claude smoke test — the suite fakes the `claude`
+   binary, so this is the only check that catches a Claude Code update
+   breaking the app: `python scripts/real_claude_smoke.py` (needs your
+   logged-in `claude`; read the final `RESULT:` line).
 3. Commit, merge to `main`.
 4. Tag and push, **matching the version exactly**:
 
