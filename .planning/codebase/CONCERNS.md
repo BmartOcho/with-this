@@ -55,13 +55,13 @@
 - Current mitigation: Writes are pinned to the workspace, so injection cannot *modify* files outside it; the app is loopback-only and single-user. GATES.md names this openly.
 - Recommendations: When scoping reads, follow the GATES.md instruction: pair it with a live run (G11-style), because a denied read is the same silent-failure class as a denied write.
 
-**The `Bash(...)` allow rule is a prefix match with an open tail:**
-- Risk: `write_permission_settings` emits `Bash({match_command}*)` (`partsmatcher/app/__init__.py:94`). Claude Code `Bash` rules are prefix globs, so the trailing `*` permits *any suffix* after the matcher invocation — including `...match inventory.json projects.json; <arbitrary command>` or `&& <arbitrary command>`. A prompt-injected turn could chain arbitrary shell off the pre-allowed prefix without a permission prompt.
+**The `Bash(...)` allow rule's open tail — verified NOT exploitable via chaining (2026-08-25):**
+- Risk (refuted): `write_permission_settings` emits `Bash({match_command}*)` (`partsmatcher/app/__init__.py:94`), and an earlier draft of this document claimed the trailing `*` allowed chaining `; <arbitrary command>` off the allowed prefix. Checked against the official permissions documentation ("Compound commands"): Claude Code splits commands on `&&`, `||`, `;`, `|`, `|&`, `&`, and newlines and requires a rule to match **each subcommand independently**, so a chained command is never auto-allowed by the prefix rule. This is documented, deliberate injection protection.
 - Files: `partsmatcher/app/__init__.py`
-- Current mitigation: None specific; the same single-user/loopback posture as above.
-- Recommendations: Drop the trailing `*` (allow the exact command, or the exact command plus a bounded flag set), and verify with a live run that the matcher re-run still fires unprompted.
+- Residual risk: The `*` still allows extra *arguments* to the matcher invocation itself (e.g. flags); `cli.py`'s argparse accepts only the two positionals and a small flag set, so the surface is trivial.
+- Recommendations: No action needed. If tightened anyway, re-verify with a live run that the matcher re-run still fires unprompted.
 
-**DNS-rebinding can bypass the session token:**
+**DNS-rebinding can bypass the session token (verified by code inspection 2026-08-25):**
 - Risk: The token/Origin scheme (`partsmatcher/app/server.py`) stops ordinary cross-origin pages, but not DNS rebinding: `GET /` and `GET /api/state` require no token, and `_authorized` compares `Origin` to the request's own `Host` header rather than to a localhost allowlist. A domain rebound to `127.0.0.1` is same-origin with itself — the attacker page can fetch `/` (which embeds `PM_TOKEN`), read the token, and POST with a matching Origin/Host pair, gaining full session control including `/api/end` (which overwrites the user's real inventory via sync).
 - Files: `partsmatcher/app/server.py` (`_authorized`, `do_GET`), `partsmatcher/app/page.py` (token embedded in the page)
 - Current mitigation: The server binds `127.0.0.1` and uses an OS-assigned random port per run, so the attacker must also discover the port; sessions are short-lived. Low likelihood for a hobbyist tool, but the sync's write-to-real-files makes the impact nontrivial.
@@ -91,13 +91,13 @@
 - Safe modification: Change the event vocabulary only alongside a `scripts/real_claude_smoke.py` run; keep the "unknown record → skip" behavior but consider logging skipped record types to stderr so drift is visible.
 - Test coverage: Fakes only; the real binary is exercised solely by the manual smoke script.
 
-**`runner.run_turn` stderr handling can deadlock:**
+**`runner.run_turn` stderr handling can deadlock (verified by code inspection 2026-08-25):**
 - Files: `partsmatcher/app/runner.py:99-133`
-- Why fragile: The child is spawned with `stderr=subprocess.PIPE`, but stderr is only read *after* `process.wait()`, and only on nonzero exit. If a `claude` process writes more than the OS pipe buffer (~64 KB) to stderr, it blocks on the full pipe, never exits, `wait()` never returns, and the turn (holding `turn_busy`) hangs the whole app.
+- Why fragile: The child is spawned with `stderr=subprocess.PIPE`, but the turn loop reads only stdout; stderr is read *after* `process.wait()`, and only on nonzero exit. If a `claude` process writes more than the OS pipe buffer (~64 KB) to stderr, it blocks on the full pipe, never exits, `wait()` never returns, and the turn (holding `turn_busy`) hangs the whole app.
 - Safe modification: Drain stderr on a background thread (or use a temp file / `stderr=subprocess.STDOUT` filtered by JSON-parse failure), then `wait()`.
 - Test coverage: No test exercises a chatty-stderr child.
 
-**Sync-back writes are non-atomic, on OneDrive-adjacent files:**
+**Sync-back writes are non-atomic, on OneDrive-adjacent files (verified by code inspection 2026-08-25):**
 - Files: `partsmatcher/chat.py` (`_sync_inventory:449-459`, `_sync_projects:531-539`, `_sync_aliases:571-580`)
 - Why fragile: The store update is `backup.write_text(...)` then `inventory_store.write_text(updated)` — a crash, power loss, or an OneDrive sync-lock `OSError` between or during the two can leave a truncated store file. The repo itself lives inside a OneDrive-synced folder on the owner's machine, and the user's data files plausibly do too; OneDrive's file locking and sync races are a real hazard for a tool whose exit path rewrites JSON files in place. The `.bak` is also single-generation: a second sync (even a bad one) overwrites the only backup.
 - Safe modification: Write to a temp file in the same directory and `os.replace()` over the store (atomic on the same volume); catch `OSError` per file (already done) but retry once on Windows sharing violations; consider timestamped backups.
@@ -109,7 +109,7 @@
 - Safe modification: Prefer a stable app-data directory (`~/.partsmatcher/sessions/`) over the temp dir for workspaces, or at minimum for session records.
 - Test coverage: recover/list/clean are well tested against injected temp roots; temp-dir eviction is inherently untestable but the exposure is architectural.
 
-**`AppState.take_kickoff` is unsynchronized:**
+**`AppState.take_kickoff` is unsynchronized (verified by code inspection 2026-08-25):**
 - Files: `partsmatcher/app/server.py:75-80`
 - Why fragile: `ThreadingHTTPServer` handles requests concurrently; two simultaneous `GET /api/state` calls can race `kickoff_sent` check-then-set and both receive the kickoff, double-firing the opening turn (the exact symptom the 2026-08-08 double-fetch bug produced by other means). The page's single-fetch discipline makes it unlikely, not impossible.
 - Safe modification: Guard with a lock or use the existing `_sync_lock` pattern.
