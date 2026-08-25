@@ -145,8 +145,24 @@ class PermissionSettingsTests(unittest.TestCase):
             allow = json.loads(path.read_text(encoding="utf-8"))["permissions"]["allow"]
             for bare in ("Edit", "Write", "MultiEdit"):
                 self.assertNotIn(bare, allow)
-            resolved = str(Path(tmp).resolve()).lstrip("/")
-            self.assertIn(f"Edit(//{resolved}/**)", allow)
+            # The rule must be POSIX-normalized — Claude Code compares
+            # paths that way on every platform, so a `C:\` rule would be
+            # accepted but never match, denying all headless writes.
+            scoped = [entry for entry in allow if entry.startswith("Edit(//")]
+            self.assertEqual(len(scoped), 1)
+            rule = scoped[0]
+            self.assertNotIn("\\", rule)
+            self.assertNotIn(":", rule)
+            self.assertTrue(rule.endswith("/**)"))
+            resolved = Path(tmp).resolve()
+            self.assertIn(resolved.name, rule)
+            if resolved.drive:  # Windows: C:\ws is matched as /c/ws
+                self.assertTrue(
+                    rule.startswith(f"Edit(//{resolved.drive[0].lower()}/")
+                )
+            else:
+                posix = resolved.as_posix().lstrip("/")
+                self.assertEqual(rule, f"Edit(//{posix}/**)")
 
     def test_no_write_or_multiedit_path_rules(self):
         # Claude Code consults Edit(path) rules only: a Write(path) or
