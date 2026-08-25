@@ -69,8 +69,18 @@ def _workspace_edit_rule(workspace: Path) -> str:
     replaces.
 
     `//` is the absolute-path anchor, so `/tmp/ws` becomes `//tmp/ws/**`.
+    Claude Code matches rules against POSIX-normalized paths: on Windows,
+    `C:\\Users\\ws` is compared as `/c/Users/ws` (forward slashes, lowercase
+    drive), so the rule must be emitted in that form — a `C:\\` rule is
+    accepted but never matches, which would deny every headless write.
     """
-    absolute = str(Path(workspace).resolve()).lstrip("/")
+    resolved = Path(workspace).resolve()
+    drive = resolved.drive
+    if len(drive) == 2 and drive[1] == ":":  # a Windows drive-letter path
+        rest = resolved.as_posix()[len(drive):].lstrip("/")
+        absolute = f"{drive[0].lower()}/{rest}"
+    else:
+        absolute = resolved.as_posix().lstrip("/")
     return f"Edit(//{absolute}/**)"
 
 

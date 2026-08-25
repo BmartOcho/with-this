@@ -7,9 +7,11 @@ on:
 
 jobs:
   unittest:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        # Linux plus Windows — the primary user runs PartsMatcher on Windows.
+        os: [ubuntu-latest, windows-latest]
         # Oldest supported (pyproject requires-python >=3.9) and current.
         python-version: ["3.9", "3.13"]
     steps:
