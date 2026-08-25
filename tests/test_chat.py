@@ -415,7 +415,10 @@ class SyncBackTests(unittest.TestCase):
 
     def run_sync(self, launch, *, seed="", no_store=False, sync=True):
         stack = tempfile.TemporaryDirectory()
-        tmp = stack.name
+        # Resolved, because run_chat resolves the workspace path before
+        # printing it: on Windows CI the temp dir arrives in DOS 8.3
+        # short form (RUNNER~1) and would never match the output.
+        tmp = str(Path(stack.name).resolve())
         self.addCleanup(stack.cleanup)
         source = Path(tmp, "inv.json")
         source.write_text(self.ORIGINAL, encoding="utf-8")
@@ -535,7 +538,10 @@ class ProjectsSyncTests(unittest.TestCase):
     def run_sync(self, launch, *, store="missing", original=None):
         """store: 'missing' (bootstrap), 'exists', or None (bundled sample)."""
         stack = tempfile.TemporaryDirectory()
-        tmp = stack.name
+        # Resolved, because run_chat resolves the workspace path before
+        # printing it: on Windows CI the temp dir arrives in DOS 8.3
+        # short form (RUNNER~1) and would never match the output.
+        tmp = str(Path(stack.name).resolve())
         self.addCleanup(stack.cleanup)
         original = self.EMPTY if original is None else original
         projects_store = None
