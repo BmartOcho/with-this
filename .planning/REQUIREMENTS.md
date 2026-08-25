@@ -66,7 +66,33 @@
 
 ## Traceability
 
-(Filled by roadmap — every v1 REQ-ID maps to exactly one phase.)
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| HOME-01 | Phase 1 | Pending |
+| HOME-02 | Phase 1 | Pending |
+| HOME-04 | Phase 1 | Pending |
+| HOME-03 | Phase 2 | Pending |
+| MCP-01 | Phase 2 | Pending |
+| MCP-02 | Phase 2 | Pending |
+| MCP-03 | Phase 2 | Pending |
+| MCP-04 | Phase 2 | Pending |
+| LIST-01 | Phase 3 | Pending |
+| LIST-02 | Phase 3 | Pending |
+| LIST-03 | Phase 3 | Pending |
+| LIST-04 | Phase 3 | Pending |
+| LIST-05 | Phase 3 | Pending |
+| BOM-01 | Phase 4 | Pending |
+| BOM-02 | Phase 4 | Pending |
+| BOM-03 | Phase 4 | Pending |
+| BOM-04 | Phase 4 | Pending |
+| CAT-01 | Phase 5 | Pending |
+| CAT-02 | Phase 5 | Pending |
+| AFF-01 | Phase 6 | Pending |
+| AFF-02 | Phase 6 | Pending |
+| AFF-03 | Phase 6 | Pending |
+| EXP-01 | Phase 6 | Pending |
+
+**Coverage: 23/23 v1 requirements mapped (roadmap 2026-08-25)**
 
 ---
 *Scoped with Ben 2026-08-25: all P1 core in; affiliate stubbed in v1; categories in v1 as inventory organization; rendered export in v1.*
