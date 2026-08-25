@@ -1,0 +1,26 @@
+{
+  "mode": "yolo",
+  "granularity": "standard",
+  "parallelization": true,
+  "commit_docs": true,
+  "model_profile": "custom",
+  "model_policy": "Fable (session model) for tough tasks; Sonnet for grunt work; no Opus for now (Ben, 2026-08-25)",
+  "model_overrides": {
+    "gsd-project-researcher": "inherit",
+    "gsd-phase-researcher": "inherit",
+    "gsd-planner": "inherit",
+    "gsd-roadmapper": "inherit",
+    "gsd-research-synthesizer": "sonnet",
+    "gsd-codebase-mapper": "sonnet",
+    "gsd-executor": "sonnet",
+    "gsd-plan-checker": "sonnet",
+    "gsd-verifier": "sonnet"
+  },
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "nyquist_validation": true,
+    "auto_advance": false
+  }
+}
